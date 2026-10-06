@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import { useAuth } from "@/lib/useAuth";
 
 async function resize(file: File, max = 1024): Promise<Blob> {
   const bmp = await createImageBitmap(file);
@@ -21,24 +22,27 @@ function toBase64(blob: Blob): Promise<string> {
 }
 
 export default function Home() {
+  const { ready, role, email, logout } = useAuth();
   const [file, setFile] = useState<File | null>(null);
   const [note, setNote] = useState("");
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [result, setResult] = useState<any>(null);
+  const [sent, setSent] = useState(false);
 
   useEffect(() => {
+    if (!ready) return;
     navigator.geolocation.getCurrentPosition(
       (p) => setCoords({ lat: p.coords.latitude, lng: p.coords.longitude }),
       () => setError("Location blocked. Allow location access and refresh.")
     );
-  }, []);
+  }, [ready]);
 
   async function submit() {
     if (!file || !coords) return;
     setBusy(true);
     setError("");
+    setSent(false);
     try {
       const blob = await resize(file);
       const image = await toBase64(blob);
@@ -68,15 +72,33 @@ export default function Home() {
         note,
       });
       if (ins.error) throw ins.error;
-      setResult(ai);
+      setSent(true);
+      setFile(null);
+      setNote("");
     } catch (e: any) {
       setError(e.message ?? "Something went wrong");
     }
     setBusy(false);
   }
 
+  if (!ready) return <p className="p-4">Loading...</p>;
+
   return (
     <main className="max-w-md mx-auto p-4 space-y-4">
+      <div className="flex justify-between items-center text-sm">
+        <span className="text-gray-500">{email}</span>
+        <div className="flex gap-3">
+          {role === "council" && (
+            <a href="/dashboard" className="text-blue-600 underline">
+              Council dashboard
+            </a>
+          )}
+          <button onClick={logout} className="text-blue-600 underline">
+            Log out
+          </button>
+        </div>
+      </div>
+
       <h1 className="text-2xl font-bold">Report a problem</h1>
       <p className="text-sm text-gray-500">
         Pothole, blocked drain, power or water fault. Take a photo and send.
@@ -86,7 +108,10 @@ export default function Home() {
         type="file"
         accept="image/*"
         capture="environment"
-        onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+        onChange={(e) => {
+          setFile(e.target.files?.[0] ?? null);
+          setSent(false);
+        }}
         className="block w-full"
       />
       <textarea
@@ -109,19 +134,14 @@ export default function Home() {
 
       {error && <p className="text-red-600 text-sm">{error}</p>}
 
-      {result && (
+      {sent && (
         <div className="border rounded p-3 space-y-1">
-          <p className="font-semibold">Report sent</p>
-          <p>Type: {result.category}</p>
-          <p>Severity: {result.severity}/5</p>
-          <p className="text-sm text-gray-600">{result.reason}</p>
-          <p className="text-sm">Suggested action: {result.suggested_action}</p>
+          <p className="font-semibold">Report sent to the council</p>
+          <p className="text-sm text-gray-600">
+            Thank you. Your report has been analysed and added to the council's priority list.
+          </p>
         </div>
       )}
-
-      <a href="/dashboard" className="block text-center text-blue-600 underline">
-        Council dashboard
-      </a>
     </main>
   );
 }
