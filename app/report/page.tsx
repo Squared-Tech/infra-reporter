@@ -5,6 +5,7 @@ import { gps, parse } from "exifr";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/useAuth";
 import { Stripe, Wordmark } from "@/components/Brand";
+import { PROVINCES, PROVINCE_NAMES } from "@/lib/zambia";
 
 const LocationPicker = dynamic(() => import("@/components/LocationPicker"), { ssr: false });
 
@@ -100,6 +101,9 @@ export default function Report() {
   const { ready, role, email, logout } = useAuth();
   const [file, setFile] = useState<File | null>(null);
   const [note, setNote] = useState("");
+  const [phone, setPhone] = useState("");
+  const [province, setProvince] = useState("");
+  const [district, setDistrict] = useState("");
   const [pos, setPos] = useState<LatLng | null>(null);
   const [acc, setAcc] = useState<number | null>(null);
   const [live, setLive] = useState<(LatLng & { acc: number }) | null>(null);
@@ -237,6 +241,8 @@ export default function Report() {
   const locationOk =
     !!pos && (forwarded ? moved : moved || (acc !== null && acc <= MAX_OK_ACCURACY));
 
+  const phoneOk = phone.replace(/\D/g, "").length >= 9;
+
   const conf = pos
     ? scoreLocation({ moved, usedPhoto, acc, photoDist, photoFresh, forwarded })
     : null;
@@ -283,6 +289,10 @@ export default function Report() {
 
       const address = await lookupAddress(pos.lat, pos.lng);
 
+      const { data: sess } = await supabase.auth.getSession();
+      const reporterName =
+        (sess?.session?.user?.user_metadata?.full_name as string) ?? email;
+
       const ins = await supabase.from("reports").insert({
         photo_url: data.publicUrl,
         lat: pos.lat,
@@ -297,6 +307,11 @@ export default function Report() {
         photo_distance_m: photoDist,
         photo_taken_at: photoTime ? photoTime.toISOString() : null,
         address,
+        reporter_phone: phone.replace(/\s/g, ""),
+        reporter_email: email,
+        reporter_name: reporterName,
+        province,
+        district,
         category: ai.category,
         severity: ai.severity,
         reason: ai.reason,
@@ -306,6 +321,8 @@ export default function Report() {
       if (ins.error) throw ins.error;
       setSent(true);
       setNote("");
+      setProvince("");
+      setDistrict("");
       onPick(null);
     } catch (e: any) {
       setError(e.message ?? "Something went wrong");
@@ -457,6 +474,68 @@ export default function Report() {
             className="w-full border border-gray-300 rounded-xl p-3 focus:outline-none focus:ring-2 focus:ring-zgreen"
           />
 
+          <div className="space-y-3">
+            <div>
+              <label htmlFor="phone" className="block text-sm font-semibold">
+                📞 Your phone number <span className="text-zred">*</span>
+              </label>
+              <input
+                id="phone"
+                type="tel"
+                placeholder="e.g. 0977 123 456"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                className="mt-1 w-full border border-gray-300 rounded-xl p-3 focus:outline-none focus:ring-2 focus:ring-zgreen"
+              />
+              <p className="text-xs text-gray-500">
+                Only the council can see this — they&apos;ll call you if the location is
+                unclear.
+              </p>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label htmlFor="province" className="block text-sm font-semibold">
+                  🗺️ Province <span className="text-zred">*</span>
+                </label>
+                <select
+                  id="province"
+                  value={province}
+                  onChange={(e) => {
+                    setProvince(e.target.value);
+                    setDistrict("");
+                  }}
+                  className="mt-1 w-full border border-gray-300 rounded-xl p-3 bg-white focus:outline-none focus:ring-2 focus:ring-zgreen"
+                >
+                  <option value="">Select province</option>
+                  {PROVINCE_NAMES.map((p) => (
+                    <option key={p} value={p}>
+                      {p}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label htmlFor="district" className="block text-sm font-semibold">
+                  📍 District <span className="text-zred">*</span>
+                </label>
+                <select
+                  id="district"
+                  value={district}
+                  onChange={(e) => setDistrict(e.target.value)}
+                  disabled={!province}
+                  className="mt-1 w-full border border-gray-300 rounded-xl p-3 bg-white focus:outline-none focus:ring-2 focus:ring-zgreen disabled:opacity-50"
+                >
+                  <option value="">{province ? "Select district" : "Pick province first"}</option>
+                  {(PROVINCES[province] ?? []).map((d) => (
+                    <option key={d} value={d}>
+                      {d}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          </div>
+
           <div className="space-y-2">
             <div className="flex items-center justify-between text-sm">
               <p className="font-semibold">📍 Problem location</p>
@@ -519,7 +598,7 @@ export default function Report() {
 
           <button
             onClick={submit}
-            disabled={!file || !locationOk || busy}
+            disabled={!file || !locationOk || !phoneOk || !province || !district || busy}
             className="w-full bg-zorange hover:brightness-110 text-white font-bold text-lg rounded-xl p-4 disabled:opacity-40"
           >
             {busy ? "Analysing your photo..." : "Submit report"}

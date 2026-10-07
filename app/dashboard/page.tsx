@@ -1,11 +1,13 @@
 "use client";
 import dynamic from "next/dynamic";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/useAuth";
 import { Stripe, Wordmark } from "@/components/Brand";
+import { PROVINCES } from "@/lib/zambia";
 
 const ReportMap = dynamic(() => import("@/components/ReportMap"), { ssr: false });
+const ReportPinMap = dynamic(() => import("@/components/ReportPinMap"), { ssr: false });
 
 function sevClass(s: number) {
   if (s >= 5) return "bg-zred text-white";
@@ -21,10 +23,28 @@ function confClass(level: string | null) {
   return "bg-gray-300 text-black";
 }
 
+function pinColor(level: string | null) {
+  return level === "High" ? "#198a00" : level === "Medium" ? "#ef7d00" : "#de2010";
+}
+
+const TABS = [
+  { key: "reported", label: "🚨 Reported", empty: "Nothing waiting. Smooth sailing! 🌊" },
+  { key: "in_progress", label: "🔧 In progress", empty: "No crews out right now. ☕" },
+  { key: "fixed", label: "✅ Fixed", empty: "No fixes yet — the win list is waiting for you! 🏆" },
+] as const;
+type TabKey = (typeof TABS)[number]["key"];
+
+function statusOf(r: any): TabKey {
+  return r.status === "fixed" || r.status === "in_progress" ? r.status : "reported";
+}
+
 export default function Dashboard() {
   const { ready, email, logout } = useAuth("council");
   const [reports, setReports] = useState<any[]>([]);
   const [onlyHigh, setOnlyHigh] = useState(false);
+  const [tab, setTab] = useState<TabKey>("reported");
+  const [prov, setProv] = useState("");
+  const [dist, setDist] = useState("");
 
   async function load() {
     const { data } = await supabase
@@ -43,11 +63,47 @@ export default function Dashboard() {
     if (ready) load();
   }, [ready]);
 
-  if (!ready) return <p className="p-6 text-center text-gray-500">Loading...</p>;
+  const base = useMemo(
+    () => reports.filter((r) => !onlyHigh || r.location_confidence === "High"),
+    [reports, onlyHigh]
+  );
 
-  const shown = onlyHigh
-    ? reports.filter((r) => r.location_confidence === "High")
-    : reports;
+  const filtered = useMemo(
+    () => base.filter((r) => (!prov || r.province === prov) && (!dist || r.district === dist)),
+    [base, prov, dist]
+  );
+
+  const countOf = (k: TabKey) => filtered.filter((r) => statusOf(r) === k).length;
+  const shown = filtered.filter((r) => statusOf(r) === tab);
+
+  const provinceCounts = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const r of base) {
+      const p = r.province ?? "Unknown";
+      m.set(p, (m.get(p) ?? 0) + 1);
+    }
+    return [...m.entries()].sort((a, b) => b[1] - a[1]);
+  }, [base]);
+
+  const groups = useMemo(() => {
+    const byProv = new Map<string, any[]>();
+    for (const r of shown) {
+      const p = r.province ?? "Unknown";
+      if (!byProv.has(p)) byProv.set(p, []);
+      byProv.get(p)!.push(r);
+    }
+    return [...byProv.entries()].map((pEntry) => {
+      const byDist = new Map<string, any[]>();
+      for (const r of pEntry[1]) {
+        const d = r.district ?? "Unknown";
+        if (!byDist.has(d)) byDist.set(d, []);
+        byDist.get(d)!.push(r);
+      }
+      return [pEntry[0], [...byDist.entries()]] as [string, [string, any[]][]];
+    });
+  }, [shown]);
+
+  if (!ready) return <p className="p-6 text-center text-gray-500">Loading...</p>;
 
   const open = reports.filter((r) => r.status !== "fixed").length;
   const urgent = reports.filter((r) => r.severity >= 4 && r.status !== "fixed").length;
@@ -103,66 +159,217 @@ export default function Dashboard() {
           ))}
         </div>
 
+        <div className="bg-white rounded-2xl shadow p-4 space-y-3 border border-gray-100">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <h2 className="text-lg font-extrabold">🗺️ Filter by area</h2>
+            <label className="flex items-center gap-2 text-sm font-semibold cursor-pointer">
+              <input
+                type="checkbox"
+                checked={onlyHigh}
+                onChange={(e) => setOnlyHigh(e.target.checked)}
+                className="w-4 h-4 accent-green-700"
+              />
+              High-confidence locations only
+            </label>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={() => {
+                setProv("");
+                setDist("");
+              }}
+              className={`rounded-full px-3 py-1 text-sm font-semibold border ${
+                prov === ""
+                  ? "bg-zgreen text-white border-zgreen"
+                  : "bg-white text-zgreen border-zgreen/40 hover:bg-zgreen/10"
+              }`}
+            >
+              🇿🇲 All provinces
+            </button>
+            {provinceCounts.map(([p, n]) => (
+              <button
+                key={p}
+                onClick={() => {
+                  setProv(p === prov ? "" : p);
+                  setDist("");
+                }}
+                className={`rounded-full px-3 py-1 text-sm font-semibold border ${
+                  prov === p
+                    ? "bg-zgreen text-white border-zgreen"
+                    : "bg-white text-zgreen border-zgreen/40 hover:bg-zgreen/10"
+                }`}
+              >
+                {p} <span className="opacity-70">({n})</span>
+              </button>
+            ))}
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <select
+              value={prov}
+              onChange={(e) => {
+                setProv(e.target.value);
+                setDist("");
+              }}
+              className="border border-gray-300 rounded-xl p-3 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-zgreen"
+            >
+              <option value="">All provinces</option>
+              {Object.keys(PROVINCES).map((p) => (
+                <option key={p} value={p}>
+                  {p}
+                </option>
+              ))}
+            </select>
+            <select
+              value={dist}
+              onChange={(e) => setDist(e.target.value)}
+              disabled={!prov}
+              className="border border-gray-300 rounded-xl p-3 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-zgreen disabled:opacity-50"
+            >
+              <option value="">{prov ? "All districts" : "Pick a province first"}</option>
+              {(PROVINCES[prov] ?? []).map((d) => (
+                <option key={d} value={d}>
+                  {d}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
         <div className="rounded-2xl overflow-hidden shadow border border-gray-200">
           <ReportMap reports={shown} />
         </div>
 
-        <div className="flex items-center justify-between pt-2">
-          <h2 className="text-xl font-extrabold">Reports by priority</h2>
-          <label className="flex items-center gap-2 text-sm font-semibold cursor-pointer">
-            <input
-              type="checkbox"
-              checked={onlyHigh}
-              onChange={(e) => setOnlyHigh(e.target.checked)}
-              className="w-4 h-4 accent-green-700"
-            />
-            High-confidence locations only
-          </label>
-        </div>
-
-        <div className="space-y-3">
-          {shown.length === 0 && <p className="text-gray-500 text-sm">No reports to show.</p>}
-          {shown.map((r) => (
-            <div
-              key={r.id}
-              className="bg-white rounded-xl shadow p-3 flex gap-3 items-center border border-gray-100"
+        <div className="grid grid-cols-3 gap-2">
+          {TABS.map((t) => (
+            <button
+              key={t.key}
+              onClick={() => setTab(t.key)}
+              className={`rounded-xl p-3 font-bold text-sm border-2 transition ${
+                tab === t.key
+                  ? t.key === "fixed"
+                    ? "bg-zgreen text-white border-zgreen"
+                    : t.key === "in_progress"
+                    ? "bg-zorange text-white border-zorange"
+                    : "bg-zred text-white border-zred"
+                  : "bg-white text-gray-700 border-gray-200 hover:border-gray-400"
+              }`}
             >
-              <img src={r.photo_url} className="w-20 h-20 object-cover rounded-lg" alt="" />
-              <div className="flex-1 text-sm">
-                <p className="font-bold flex items-center gap-2 flex-wrap">
-                  <span className={`rounded-full px-2 py-0.5 text-xs ${sevClass(r.severity)}`}>
-                    {r.severity}/5
-                  </span>
-                  {String(r.category).replace("_", " ")}
-                  <span
-                    className={`rounded-full px-2 py-0.5 text-xs ${confClass(
-                      r.location_confidence
-                    )}`}
-                  >
-                    🛡️ {r.location_confidence ?? "Unrated"}
-                    {r.location_score != null && ` ${r.location_score}`}
-                  </span>
-                </p>
-                <p className="text-gray-600">{r.reason}</p>
-                <p className="text-gray-800">{r.suggested_action}</p>
-                <p className="text-xs text-gray-500">
-                  📍 {r.address ?? "Address unavailable"}
-                  {r.accuracy_m != null && ` · ±${r.accuracy_m} m`}
-                  {r.location_source && ` · ${r.location_source}`}
-                </p>
-              </div>
-              <select
-                value={r.status}
-                onChange={(e) => setStatus(r.id, e.target.value)}
-                className="border border-gray-300 rounded-lg p-2 text-sm"
+              {t.label}
+              <span
+                className={`ml-2 rounded-full px-2 py-0.5 text-xs ${
+                  tab === t.key ? "bg-white/25" : "bg-gray-100"
+                }`}
               >
-                <option value="reported">Reported</option>
-                <option value="in_progress">In progress</option>
-                <option value="fixed">Fixed</option>
-              </select>
-            </div>
+                {countOf(t.key)}
+              </span>
+            </button>
           ))}
         </div>
+
+        {shown.length === 0 && (
+          <div className="bg-white rounded-2xl shadow p-8 text-center border border-gray-100">
+            <p className="text-4xl">🧹</p>
+            <p className="text-gray-600 mt-2 font-semibold">
+              {TABS.find((t) => t.key === tab)?.empty}
+            </p>
+          </div>
+        )}
+
+        {groups.map(([p, districts]) => (
+          <section key={p} className="space-y-3">
+            <h2 className="text-xl font-extrabold flex items-center gap-2 pt-2">
+              🗺️ {p}
+              <span className="text-sm font-semibold text-gray-500">
+                ({districts.reduce((n, dRs) => n + dRs[1].length, 0)} in this tab)
+              </span>
+            </h2>
+            {districts.map(([d, rs]) => (
+              <div key={d} className="space-y-3">
+                <h3 className="text-sm font-bold text-zgreen uppercase tracking-wide">
+                  📍 {d} District
+                </h3>
+                {rs.map((r) => (
+                  <div
+                    key={r.id}
+                    className="bg-white rounded-2xl shadow p-4 border border-gray-100 hover:shadow-md transition space-y-3"
+                  >
+                    <div className="flex gap-4 flex-col md:flex-row">
+                      <div className="md:w-56 shrink-0 space-y-2">
+                        <img
+                          src={r.photo_url}
+                          className="w-full h-32 object-cover rounded-xl border border-gray-200"
+                          alt=""
+                        />
+                        <div className="rounded-xl overflow-hidden border border-gray-200">
+                          <ReportPinMap
+                            lat={r.lat}
+                            lng={r.lng}
+                            color={pinColor(r.location_confidence)}
+                            label={r.address ?? "Pinned location"}
+                          />
+                        </div>
+                      </div>
+                      <div className="flex-1 text-sm space-y-2">
+                        <p className="font-bold flex items-center gap-2 flex-wrap">
+                          <span className={`rounded-full px-2 py-0.5 text-xs ${sevClass(r.severity)}`}>
+                            {r.severity}/5
+                          </span>
+                          {String(r.category).replace("_", " ")}
+                          <span
+                            className={`rounded-full px-2 py-0.5 text-xs ${confClass(
+                              r.location_confidence
+                            )}`}
+                          >
+                            🛡️ {r.location_confidence ?? "Unrated"}
+                            {r.location_score != null && ` ${r.location_score}`}
+                          </span>
+                        </p>
+                        <p className="text-gray-600">{r.reason}</p>
+                        <p className="text-gray-800">{r.suggested_action}</p>
+                        <p className="text-xs text-gray-500">
+                          📍 {r.address ?? "Address unavailable"}
+                          {r.accuracy_m != null && ` · ±${r.accuracy_m} m`}
+                          {r.location_source && ` · ${r.location_source}`}
+                        </p>
+                        <div className="rounded-xl bg-zcream border border-zgreen/20 p-3 text-xs space-y-1">
+                          <p className="font-bold text-zdeep">👤 Reporter contact (council only)</p>
+                          <p>
+                            {r.reporter_name ?? "Citizen"} ·{" "}
+                            {r.reporter_phone ? (
+                              <a
+                                href={`tel:${r.reporter_phone}`}
+                                className="text-zgreen font-semibold underline"
+                              >
+                                📞 {r.reporter_phone}
+                              </a>
+                            ) : (
+                              <span className="text-gray-500">📞 no phone given</span>
+                            )}
+                          </p>
+                          <p className="text-gray-600">✉️ {r.reporter_email ?? "—"}</p>
+                          {r.note && <p className="text-gray-600">📝 {r.note}</p>}
+                        </div>
+                      </div>
+                      <div className="md:w-40 shrink-0">
+                        <select
+                          value={r.status}
+                          onChange={(e) => setStatus(r.id, e.target.value)}
+                          className="w-full border border-gray-300 rounded-lg p-2 text-sm bg-white"
+                        >
+                          <option value="reported">🚨 Reported</option>
+                          <option value="in_progress">🔧 In progress</option>
+                          <option value="fixed">✅ Fixed</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ))}
+          </section>
+        ))}
       </main>
     </div>
   );
