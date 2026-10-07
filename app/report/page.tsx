@@ -113,7 +113,7 @@ export default function Report() {
   const [photoTime, setPhotoTime] = useState<Date | null>(null);
   const [photoOld, setPhotoOld] = useState(false);
   const [photoChecked, setPhotoChecked] = useState(false);
-  const [choice, setChoice] = useState<"photo" | "gps" | null>(null);
+  const [scene, setScene] = useState<"yes" | "no" | null>(null);
   const [gpsErr, setGpsErr] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -121,6 +121,7 @@ export default function Report() {
 
   const movedRef = useRef(false);
   const bestRef = useRef(Infinity);
+  const sceneRef = useRef<"yes" | "no" | null>(null);
 
   const preview = useMemo(() => (file ? URL.createObjectURL(file) : null), [file]);
 
@@ -140,7 +141,7 @@ export default function Report() {
           bestRef.current = a;
           const here = { lat: p.coords.latitude, lng: p.coords.longitude };
           setLive({ ...here, acc: Math.round(a) });
-          if (!movedRef.current) {
+          if (!movedRef.current && sceneRef.current === "yes") {
             setPos(here);
             setAcc(Math.round(a));
             setGpsErr("");
@@ -180,12 +181,13 @@ export default function Report() {
     setPhotoTime(null);
     setPhotoOld(false);
     setPhotoChecked(false);
-    setChoice(null);
     if (!f) return;
+    let pg: LatLng | null = null;
     try {
       const g = await gps(f);
       if (g && typeof g.latitude === "number" && typeof g.longitude === "number") {
-        setPhotoGps({ lat: g.latitude, lng: g.longitude });
+        pg = { lat: g.latitude, lng: g.longitude };
+        setPhotoGps(pg);
       }
       const t: any = await parse(f, ["DateTimeOriginal"]);
       if (t?.DateTimeOriginal) {
@@ -197,6 +199,21 @@ export default function Report() {
       // photo has no readable metadata
     }
     setPhotoChecked(true);
+    if (sceneRef.current === "no") {
+      if (pg) {
+        movedRef.current = true;
+        setMoved(true);
+        setUsedPhoto(true);
+        setPos(pg);
+        setGpsErr("");
+      } else {
+        movedRef.current = false;
+        setMoved(false);
+        setUsedPhoto(false);
+        setPos((p) => p ?? { lat: FALLBACK.lat, lng: FALLBACK.lng });
+        setGpsErr("This photo has no saved location. Tap the map to place the pin on the problem.");
+      }
+    }
   }
 
   function moveTo(lat: number, lng: number) {
@@ -206,32 +223,44 @@ export default function Report() {
     setPos({ lat, lng });
   }
 
-  function choosePhoto() {
-    if (!photoGps) return;
-    movedRef.current = true;
-    setMoved(true);
-    setUsedPhoto(true);
-    setChoice("photo");
-    setPos(photoGps);
-  }
-
-  function chooseLive() {
-    if (!live) return;
-    movedRef.current = false;
-    setMoved(false);
-    setUsedPhoto(false);
-    setChoice("gps");
-    setPos({ lat: live.lat, lng: live.lng });
-    setAcc(live.acc);
-  }
-
   function redetect() {
     movedRef.current = false;
     bestRef.current = Infinity;
     setMoved(false);
     setUsedPhoto(false);
-    setChoice(null);
     setAcc(null);
+  }
+
+  function pickScene(s: "yes" | "no") {
+    sceneRef.current = s;
+    setScene(s);
+    setGpsErr("");
+    if (s === "yes") {
+      movedRef.current = false;
+      setMoved(false);
+      setUsedPhoto(false);
+      setAcc(null);
+      if (live) {
+        setPos({ lat: live.lat, lng: live.lng });
+        setAcc(live.acc);
+      } else {
+        setPos(null);
+      }
+    } else if (photoGps) {
+      movedRef.current = true;
+      setMoved(true);
+      setUsedPhoto(true);
+      setPos(photoGps);
+    } else {
+      movedRef.current = false;
+      setMoved(false);
+      setUsedPhoto(false);
+      setAcc(null);
+      setPos((p) => p ?? { lat: FALLBACK.lat, lng: FALLBACK.lng });
+      if (photoChecked && file) {
+        setGpsErr("This photo has no saved location. Tap the map to place the pin on the problem.");
+      }
+    }
   }
 
   const photoDist = photoGps && live ? Math.round(distanceM(photoGps, live)) : null;
@@ -249,12 +278,15 @@ export default function Report() {
   const confColor =
     conf?.level === "High" ? "#198a00" : conf?.level === "Medium" ? "#ef7d00" : "#de2010";
 
-  const quality = moved
-    ? { text: usedPhoto ? "Using photo location" : "Pin placed by you", color: "text-zgreen" }
-    : acc === null
-    ? pos
-      ? { text: "Place the pin on the map", color: "text-zorange" }
-      : { text: "Finding your location...", color: "text-gray-500" }
+  const quality =
+    scene === null
+      ? { text: "Answer the question below", color: "text-gray-500" }
+      : moved
+      ? { text: usedPhoto ? "Using photo location" : "Pin placed by you", color: "text-zgreen" }
+      : acc === null
+      ? pos
+        ? { text: "Place the pin on the map", color: "text-zorange" }
+        : { text: "Finding your location...", color: "text-gray-500" }
     : acc <= 20
     ? { text: `Excellent (±${acc} m)`, color: "text-zgreen" }
     : acc <= MAX_OK_ACCURACY
@@ -414,45 +446,24 @@ export default function Report() {
             </div>
           )}
 
-          {file && photoGps && (
-            <div className="rounded-xl border border-gray-200 p-3 text-sm space-y-2">
+          {file && photoGps && scene === "yes" && (
+            <div className="rounded-xl border border-gray-200 p-3 text-sm">
               {photoDist !== null && photoDist <= MATCH_DISTANCE ? (
                 <p className="text-zgreen font-semibold">
-                  ✅ Photo location matches your GPS ({photoDist} m apart)
+                  ✅ Photo location matches your GPS ({photoDist} m apart) — strong evidence!
                 </p>
               ) : (
-                <>
-                  <p className="font-semibold text-zred">
-                    {photoDist !== null
-                      ? `⚠️ This photo was taken ${photoDist} m from where you are now.`
-                      : "📸 This photo has a location saved in it."}
-                  </p>
-                  {choice === null ? (
-                    <div className="flex gap-2 flex-wrap">
-                      <button
-                        type="button"
-                        onClick={choosePhoto}
-                        className="bg-zgreen text-white rounded-lg px-3 py-2 font-semibold"
-                      >
-                        Use photo location
-                      </button>
-                      {live && (
-                        <button
-                          type="button"
-                          onClick={chooseLive}
-                          className="border border-zgreen text-zgreen rounded-lg px-3 py-2 font-semibold"
-                        >
-                          Use my current location
-                        </button>
-                      )}
-                    </div>
-                  ) : (
-                    <p className="text-gray-600">
-                      Using {choice === "photo" ? "the photo's" : "your current"} location.
-                    </p>
-                  )}
-                </>
+                <p className="text-gray-600">
+                  {photoDist !== null
+                    ? `📸 This photo was taken ${photoDist} m from here — since you're at the scene, we'll use your live GPS.`
+                    : "📸 This photo also carries a location — great, it cross-checks your GPS!"}
+                </p>
               )}
+            </div>
+          )}
+          {file && photoGps && scene === "no" && (
+            <div className="rounded-xl border border-zgreen/40 bg-zgreen/10 p-3 text-sm font-semibold text-zgreen">
+              📸 Using the location saved inside your photo — pin set on the map below.
             </div>
           )}
           {file && photoChecked && !photoGps && !forwarded && (
@@ -542,40 +553,108 @@ export default function Report() {
               <p className={`font-semibold ${quality.color}`}>{quality.text}</p>
             </div>
 
-            {gpsErr && <p className="text-zred text-sm">{gpsErr}</p>}
-
-            {pos ? (
-              <div className="rounded-xl overflow-hidden border border-gray-200">
-                <LocationPicker
-                  lat={pos.lat}
-                  lng={pos.lng}
-                  accuracy={moved ? null : acc}
-                  onChange={moveTo}
-                />
+            {scene === null ? (
+              <div className="rounded-2xl bg-white border-2 border-zgreen/30 shadow p-5 space-y-4">
+                <div className="text-center space-y-1">
+                  <p className="text-4xl">🤔</p>
+                  <h2 className="text-lg font-extrabold">Where are you right now?</h2>
+                  <p className="text-xs text-gray-600">
+                    This picks the most honest location for your report — and boosts its
+                    confidence score.
+                  </p>
+                </div>
+                <div className="grid sm:grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => pickScene("yes")}
+                    className="rounded-2xl border-2 border-zgreen/50 bg-zgreen/5 hover:bg-zgreen/15 hover:-translate-y-0.5 transition p-4 text-left space-y-1"
+                  >
+                    <p className="text-3xl">🧍</p>
+                    <p className="font-extrabold text-zgreen">I&apos;m at the problem now</p>
+                    <p className="text-xs text-gray-600">
+                      We&apos;ll use your live GPS — switch your phone&apos;s location ON.
+                    </p>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => pickScene("no")}
+                    className="rounded-2xl border-2 border-zorange/50 bg-zorange/5 hover:bg-zorange/15 hover:-translate-y-0.5 transition p-4 text-left space-y-1"
+                  >
+                    <p className="text-3xl">🛋️</p>
+                    <p className="font-extrabold text-zorange">I&apos;m somewhere else</p>
+                    <p className="text-xs text-gray-600">
+                      We&apos;ll use the location saved in your photo — no tags? You&apos;ll
+                      place the pin.
+                    </p>
+                  </button>
+                </div>
               </div>
             ) : (
-              <div className="h-24 rounded-xl bg-gray-100 flex items-center justify-center text-sm text-gray-500">
-                Waiting for GPS...
-              </div>
-            )}
+              <>
+                {scene === "yes" ? (
+                  <div className="rounded-xl border border-zgreen/40 bg-zgreen/10 p-3 text-sm space-y-1">
+                    <p className="font-bold text-zgreen">🛰️ You&apos;re at the scene — perfect!</p>
+                    <p className="text-gray-700">
+                      Turn your phone&apos;s location ON and stay put while we lock the pin.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="rounded-xl border border-zorange/40 bg-zorange/10 p-3 text-sm space-y-1">
+                    <p className="font-bold text-zorange">📸 Not at the scene — no problem.</p>
+                    <p className="text-gray-700">
+                      Make sure your photo was taken with <b>Location tags ON</b>. If it carries
+                      no location, just tap the map to place the pin yourself.
+                    </p>
+                  </div>
+                )}
 
-            <p className="text-xs text-gray-500">
-              Tap the map or drag the red pin to place it exactly on the problem.
-            </p>
-            {!locationOk && pos && (
-              <p className="text-xs text-zred">
-                {forwarded
-                  ? "Tap the map to place the pin on the exact spot to continue."
-                  : "GPS is weak. Move outside, or tap the map to place the pin on the exact spot."}
-              </p>
+                {gpsErr && <p className="text-zred text-sm">{gpsErr}</p>}
+
+                {pos ? (
+                  <div className="rounded-xl overflow-hidden border border-gray-200">
+                    <LocationPicker
+                      lat={pos.lat}
+                      lng={pos.lng}
+                      accuracy={moved ? null : acc}
+                      onChange={moveTo}
+                    />
+                  </div>
+                ) : (
+                  <div className="h-24 rounded-xl bg-gray-100 flex items-center justify-center text-sm text-gray-500">
+                    Finding your GPS... make sure location is ON.
+                  </div>
+                )}
+
+                <p className="text-xs text-gray-500">
+                  Tap the map or drag the red pin to place it exactly on the problem.
+                </p>
+                {!locationOk && pos && (
+                  <p className="text-xs text-zred">
+                    {forwarded || scene === "no"
+                      ? "Tap the map to place the pin on the exact spot to continue."
+                      : "GPS is weak. Move outside, or tap the map to place the pin on the exact spot."}
+                  </p>
+                )}
+                <div className="flex gap-4 flex-wrap">
+                  {scene === "yes" && (
+                    <button
+                      onClick={redetect}
+                      type="button"
+                      className="text-sm text-zgreen underline font-semibold"
+                    >
+                      Re-detect my location
+                    </button>
+                  )}
+                  <button
+                    onClick={() => pickScene(scene === "yes" ? "no" : "yes")}
+                    type="button"
+                    className="text-sm text-zorange underline font-semibold"
+                  >
+                    Switch to {scene === "yes" ? '"I\'m somewhere else"' : '"I\'m at the scene"'}
+                  </button>
+                </div>
+              </>
             )}
-            <button
-              onClick={redetect}
-              type="button"
-              className="text-sm text-zgreen underline font-semibold"
-            >
-              Re-detect my location
-            </button>
           </div>
 
           {conf && (
