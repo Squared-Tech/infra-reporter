@@ -24,7 +24,7 @@ export function useAuth(required?: "council") {
         .single();
       const r = p?.role ?? "citizen";
       if (required && r !== required) {
-        router.replace("/");
+        router.replace("/report");
         return;
       }
       setRole(r);
@@ -35,7 +35,7 @@ export function useAuth(required?: "council") {
 
   async function logout() {
     await supabase.auth.signOut();
-    router.replace("/login");
+    router.replace("/");
   }
 
   return { ready, role, email, logout };
