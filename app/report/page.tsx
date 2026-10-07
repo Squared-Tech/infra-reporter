@@ -10,6 +10,7 @@ const LocationPicker = dynamic(() => import("@/components/LocationPicker"), { ss
 
 const MAX_OK_ACCURACY = 30; // metres
 const MATCH_DISTANCE = 50; // metres: photo vs GPS agreement
+const FALLBACK: LatLng = { lat: -12.9922, lng: 28.5781 }; // Ndola centre, for manual pin
 
 type LatLng = { lat: number; lng: number };
 
@@ -138,20 +139,35 @@ export default function Report() {
           if (!movedRef.current) {
             setPos(here);
             setAcc(Math.round(a));
+            setGpsErr("");
           }
         }
       },
       (e) => {
         if (e.code === 1) {
           setGpsErr(
-            "Location is blocked. Allow location access in your browser settings, then refresh."
+            "Location is blocked. Allow location access in your browser settings, then refresh, or tap the map to place the pin yourself."
+          );
+        } else {
+          setGpsErr(
+            "GPS isn't available right now. Tap the map below to place the pin on the problem."
           );
         }
+        setPos((p) => p ?? { lat: FALLBACK.lat, lng: FALLBACK.lng });
       },
       { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 }
     );
     return () => navigator.geolocation.clearWatch(id);
   }, [ready]);
+
+  useEffect(() => {
+    if (!ready || pos) return;
+    const t = setTimeout(() => {
+      setPos((p) => p ?? { lat: FALLBACK.lat, lng: FALLBACK.lng });
+      setGpsErr("GPS is taking too long. Tap the map below to place the pin on the problem.");
+    }, 10000);
+    return () => clearTimeout(t);
+  }, [ready, pos]);
 
   async function onPick(f: File | null) {
     setFile(f);
@@ -230,7 +246,9 @@ export default function Report() {
   const quality = moved
     ? { text: usedPhoto ? "Using photo location" : "Pin placed by you", color: "text-zgreen" }
     : acc === null
-    ? { text: "Finding your location...", color: "text-gray-500" }
+    ? pos
+      ? { text: "Place the pin on the map", color: "text-zorange" }
+      : { text: "Finding your location...", color: "text-gray-500" }
     : acc <= 20
     ? { text: `Excellent (±${acc} m)`, color: "text-zgreen" }
     : acc <= MAX_OK_ACCURACY
