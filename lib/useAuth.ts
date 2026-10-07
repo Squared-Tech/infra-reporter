@@ -23,7 +23,8 @@ export function useAuth(required?: "council") {
         .eq("id", user.id)
         .single();
       const r = p?.role ?? "citizen";
-      if (required && r !== required) {
+      const isCouncil = r === "council" || r === "admin";
+      if (required === "council" && !isCouncil) {
         router.replace("/report");
         return;
       }

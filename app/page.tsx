@@ -9,7 +9,7 @@ export default function Home() {
 
   useEffect(() => {
     if (!ready) return;
-    router.replace(role === "council" ? "/dashboard" : "/report");
+    router.replace(role === "council" || role === "admin" ? "/dashboard" : "/report");
   }, [ready, role, router]);
 
   if (!ready) return <p className="p-6 text-center text-gray-500">Loading...</p>;

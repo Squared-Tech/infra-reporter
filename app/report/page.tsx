@@ -6,6 +6,14 @@ import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/useAuth";
 import { Stripe, Wordmark } from "@/components/Brand";
 import { PROVINCES, PROVINCE_NAMES } from "@/lib/zambia";
+import {
+  CATEGORIES,
+  CATEGORY_IDS,
+  normalizeCategory,
+  deptOf,
+  deptInfo,
+  catInfo,
+} from "@/lib/departments";
 
 const LocationPicker = dynamic(() => import("@/components/LocationPicker"), { ssr: false });
 
@@ -118,6 +126,10 @@ export default function Report() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [sent, setSent] = useState(false);
+  const [aiResult, setAiResult] = useState<any | null>(null);
+  const [chosenCategory, setChosenCategory] = useState<string | null>(null);
+
+  const imageRef = useRef<string | null>(null);
 
   const movedRef = useRef(false);
   const bestRef = useRef(Infinity);
@@ -298,9 +310,11 @@ export default function Report() {
     setBusy(true);
     setError("");
     setSent(false);
+    setAiResult(null);
     try {
       const blob = await resize(file);
       const image = await toBase64(blob);
+      imageRef.current = image;
       const res = await fetch("/api/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -311,6 +325,21 @@ export default function Report() {
         throw new Error(e.error ?? "AI analysis failed");
       }
       const ai = await res.json();
+      setAiResult(ai);
+      setChosenCategory(normalizeCategory(ai.category));
+    } catch (e: any) {
+      setError(e.message ?? "Something went wrong");
+    }
+    setBusy(false);
+  }
+
+  async function confirmSubmit() {
+    if (!file || !pos || !locationOk || !conf || !aiResult || !chosenCategory) return;
+    setBusy(true);
+    setError("");
+    setSent(false);
+    try {
+      const blob = await resize(file);
 
       const path = `${crypto.randomUUID()}.jpg`;
       const up = await supabase.storage
@@ -344,10 +373,11 @@ export default function Report() {
         reporter_name: reporterName,
         province,
         district,
-        category: ai.category,
-        severity: ai.severity,
-        reason: ai.reason,
-        suggested_action: ai.suggested_action,
+        category: chosenCategory,
+        department: deptOf(chosenCategory),
+        severity: aiResult.severity,
+        reason: aiResult.reason,
+        suggested_action: aiResult.suggested_action,
         note,
       });
       if (ins.error) throw ins.error;
@@ -355,6 +385,9 @@ export default function Report() {
       setNote("");
       setProvince("");
       setDistrict("");
+      setAiResult(null);
+      setChosenCategory(null);
+      imageRef.current = null;
       onPick(null);
     } catch (e: any) {
       setError(e.message ?? "Something went wrong");
@@ -675,13 +708,74 @@ export default function Report() {
             </div>
           )}
 
-          <button
-            onClick={submit}
-            disabled={!file || !locationOk || !phoneOk || !province || !district || busy}
-            className="w-full bg-zorange hover:brightness-110 text-white font-bold text-lg rounded-xl p-4 disabled:opacity-40"
-          >
-            {busy ? "Analysing your photo..." : "Submit report"}
-          </button>
+          {aiResult ? (
+            <div className="rounded-2xl border-2 border-zorange/50 bg-zorange/5 p-4 space-y-3">
+              <div className="text-center space-y-1">
+                <p className="text-3xl">🤖</p>
+                <h2 className="text-lg font-extrabold">
+                  The AI thinks this is: {catInfo(chosenCategory).label}
+                </h2>
+                {aiResult.reason && (
+                  <p className="text-xs text-gray-600 italic">“{aiResult.reason}”</p>
+                )}
+                <p className="text-xs text-gray-600">
+                  Photos can look alike — a baby fallen in a well vs a blocked drain, for
+                  example. Please confirm or pick the correct issue so it reaches the right
+                  department.
+                </p>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                {CATEGORY_IDS.map((c) => (
+                  <button
+                    key={c}
+                    type="button"
+                    onClick={() => setChosenCategory(c)}
+                    className={`rounded-xl border-2 p-2 text-xs font-semibold text-left transition ${
+                      chosenCategory === c
+                        ? "border-zgreen bg-zgreen/15 text-zdeep"
+                        : "border-gray-200 bg-white hover:border-zgreen/50"
+                    }`}
+                  >
+                    <span className="text-lg block">{CATEGORIES[c].emoji}</span>
+                    {CATEGORIES[c].label}
+                  </button>
+                ))}
+              </div>
+              <div className="rounded-xl bg-white border border-zgreen/30 p-3 text-sm">
+                <p className="font-bold text-zdeep">
+                  {deptInfo(deptOf(chosenCategory ?? "")).emoji} Will be sent to:{" "}
+                  {deptInfo(deptOf(chosenCategory ?? "")).name}
+                </p>
+                <p className="text-xs text-gray-600">
+                  {deptInfo(deptOf(chosenCategory ?? "")).blurb}
+                </p>
+              </div>
+              <button
+                onClick={confirmSubmit}
+                disabled={!chosenCategory || busy}
+                className="w-full bg-zgreen hover:brightness-110 text-white font-bold text-lg rounded-xl p-4 disabled:opacity-40"
+              >
+                {busy
+                  ? "Sending..."
+                  : `Confirm & send to ${deptInfo(deptOf(chosenCategory ?? "")).name}`}
+              </button>
+              <button
+                onClick={() => setAiResult(null)}
+                type="button"
+                className="w-full text-zorange underline text-sm font-semibold"
+              >
+                Change photo / start over
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={submit}
+              disabled={!file || !locationOk || !phoneOk || !province || !district || busy}
+              className="w-full bg-zorange hover:brightness-110 text-white font-bold text-lg rounded-xl p-4 disabled:opacity-40"
+            >
+              {busy ? "Analysing your photo..." : "Analyse photo & continue"}
+            </button>
+          )}
 
           {error && <p className="text-zred text-sm">{error}</p>}
         </div>

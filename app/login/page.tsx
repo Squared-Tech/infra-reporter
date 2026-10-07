@@ -22,7 +22,9 @@ export default function Login() {
       .select("role")
       .eq("id", userId)
       .single();
-    router.replace(p?.role === "council" ? "/dashboard" : "/report");
+    router.replace(
+      p?.role === "council" || p?.role === "admin" ? "/dashboard" : "/report"
+    );
   }
 
   useEffect(() => {

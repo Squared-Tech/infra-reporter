@@ -5,6 +5,7 @@ import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/useAuth";
 import { Stripe, Wordmark } from "@/components/Brand";
 import { PROVINCES } from "@/lib/zambia";
+import { DEPARTMENT_IDS, deptInfo, catInfo } from "@/lib/departments";
 
 const ReportMap = dynamic(() => import("@/components/ReportMap"), { ssr: false });
 const ReportPinMap = dynamic(() => import("@/components/ReportPinMap"), { ssr: false });
@@ -39,12 +40,13 @@ function statusOf(r: any): TabKey {
 }
 
 export default function Dashboard() {
-  const { ready, email, logout } = useAuth("council");
+  const { ready, role, email, logout } = useAuth("council");
   const [reports, setReports] = useState<any[]>([]);
   const [onlyHigh, setOnlyHigh] = useState(false);
   const [tab, setTab] = useState<TabKey>("reported");
   const [prov, setProv] = useState("");
   const [dist, setDist] = useState("");
+  const [dept, setDept] = useState("");
 
   async function load() {
     const { data } = await supabase
@@ -69,8 +71,14 @@ export default function Dashboard() {
   );
 
   const filtered = useMemo(
-    () => base.filter((r) => (!prov || r.province === prov) && (!dist || r.district === dist)),
-    [base, prov, dist]
+    () =>
+      base.filter(
+        (r) =>
+          (!prov || r.province === prov) &&
+          (!dist || r.district === dist) &&
+          (!dept || r.department === dept)
+      ),
+    [base, prov, dist, dept]
   );
 
   const countOf = (k: TabKey) => filtered.filter((r) => statusOf(r) === k).length;
@@ -83,6 +91,15 @@ export default function Dashboard() {
       m.set(p, (m.get(p) ?? 0) + 1);
     }
     return [...m.entries()].sort((a, b) => b[1] - a[1]);
+  }, [base]);
+
+  const deptCounts = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const r of base) {
+      const d = r.department ?? "general";
+      m.set(d, (m.get(d) ?? 0) + 1);
+    }
+    return m;
   }, [base]);
 
   const groups = useMemo(() => {
@@ -132,6 +149,11 @@ export default function Dashboard() {
           </div>
           <div className="flex items-center gap-3 text-sm">
             <span className="hidden sm:inline opacity-80">{email}</span>
+            {role === "admin" && (
+              <a href="/admin" className="bg-white/15 hover:bg-white/25 rounded-full px-3 py-1 font-semibold">
+                👑 Admin
+              </a>
+            )}
             <button
               onClick={logout}
               className="bg-white/15 hover:bg-white/25 rounded-full px-3 py-1"
@@ -203,6 +225,36 @@ export default function Dashboard() {
                 {p} <span className="opacity-70">({n})</span>
               </button>
             ))}
+          </div>
+
+          <div className="pt-1">
+            <p className="text-sm font-extrabold mb-2">🏢 Filter by department</p>
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={() => setDept("")}
+                className={`rounded-full px-3 py-1 text-sm font-semibold border ${
+                  dept === ""
+                    ? "bg-zdeep text-white border-zdeep"
+                    : "bg-white text-zdeep border-zdeep/40 hover:bg-zdeep/10"
+                }`}
+              >
+                🏛️ All departments
+              </button>
+              {DEPARTMENT_IDS.map((d) => (
+                <button
+                  key={d}
+                  onClick={() => setDept(d === dept ? "" : d)}
+                  className={`rounded-full px-3 py-1 text-sm font-semibold border ${
+                    dept === d
+                      ? "bg-zdeep text-white border-zdeep"
+                      : "bg-white text-zdeep border-zdeep/40 hover:bg-zdeep/10"
+                  }`}
+                >
+                  {deptInfo(d).emoji} {deptInfo(d).name}
+                  <span className="opacity-70"> ({deptCounts.get(d) ?? 0})</span>
+                </button>
+              ))}
+            </div>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
@@ -316,7 +368,7 @@ export default function Dashboard() {
                           <span className={`rounded-full px-2 py-0.5 text-xs ${sevClass(r.severity)}`}>
                             {r.severity}/5
                           </span>
-                          {String(r.category).replace("_", " ")}
+                          {catInfo(r.category).emoji} {catInfo(r.category).label}
                           <span
                             className={`rounded-full px-2 py-0.5 text-xs ${confClass(
                               r.location_confidence
@@ -325,6 +377,9 @@ export default function Dashboard() {
                             🛡️ {r.location_confidence ?? "Unrated"}
                             {r.location_score != null && ` ${r.location_score}`}
                           </span>
+                        </p>
+                        <p className="inline-flex items-center gap-1 rounded-full bg-zdeep text-white px-3 py-1 text-xs font-bold">
+                          {deptInfo(r.department).emoji} Alerted: {deptInfo(r.department).name}
                         </p>
                         <p className="text-gray-600">{r.reason}</p>
                         <p className="text-gray-800">{r.suggested_action}</p>
