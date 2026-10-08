@@ -1,6 +1,6 @@
 "use client";
 import dynamic from "next/dynamic";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/useAuth";
 import { Stripe, Wordmark } from "@/components/Brand";
@@ -67,27 +67,59 @@ export default function Dashboard() {
     if (ready) load();
   }, [ready]);
 
+  // Shared AudioContext, unlocked on first user gesture (browsers block autoplay).
+  const audioRef = useRef<any>(null);
+  function audioCtx() {
+    if (!audioRef.current) {
+      const Ctx = window.AudioContext || (window as any).webkitAudioContext;
+      audioRef.current = new Ctx();
+    }
+    if (audioRef.current.state === "suspended") {
+      audioRef.current.resume().catch(() => {});
+    }
+    return audioRef.current;
+  }
+
+  useEffect(() => {
+    const unlock = () => {
+      try {
+        audioCtx();
+      } catch {}
+    };
+    window.addEventListener("pointerdown", unlock);
+    window.addEventListener("keydown", unlock);
+    return () => {
+      window.removeEventListener("pointerdown", unlock);
+      window.removeEventListener("keydown", unlock);
+    };
+  }, []);
+
   // Two-tone siren via WebAudio (no external audio file needed).
   function playSiren() {
     try {
-      const Ctx =
-        window.AudioContext || (window as any).webkitAudioContext;
-      const ctx = new Ctx();
+      const ctx = audioCtx();
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
       osc.type = "sawtooth";
-      gain.gain.value = 0.15;
+      gain.gain.value = 0.3;
       osc.connect(gain);
       gain.connect(ctx.destination);
       const t = ctx.currentTime;
       for (let i = 0; i < 6; i++) {
-        osc.frequency.setValueAtTime(i % 2 === 0 ? 880 : 620, t + i * 0.5);
+        osc.frequency.setValueAtTime(i % 2 === 0 ? 988 : 660, t + i * 0.4);
       }
       osc.start(t);
-      osc.stop(t + 3);
-      osc.onended = () => ctx.close();
+      osc.stop(t + 2.4);
     } catch {}
   }
+
+  // Repeat the siren every 3s while the alarm overlay is up.
+  useEffect(() => {
+    if (!alarm) return;
+    playSiren();
+    const iv = setInterval(playSiren, 3000);
+    return () => clearInterval(iv);
+  }, [alarm]);
 
   // Live emergency alarm: flash + siren when a new urgent report lands.
   useEffect(() => {
@@ -104,7 +136,6 @@ export default function Dashboard() {
           const urgent = deptInfo(r.department).emergency || (r.severity ?? 0) >= 4;
           if (urgent) {
             setAlarm(r);
-            playSiren();
             if (typeof Notification !== "undefined" && Notification.permission === "granted") {
               new Notification(`🚨 FIXZED ${deptInfo(r.department).name}`, {
                 body: `${catInfo(r.category).label} (severity ${r.severity}/5) — ${
