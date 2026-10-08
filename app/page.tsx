@@ -29,7 +29,7 @@ const SERVICES = [
     img: "/img/partnership.png",
     tag: "COMMUNITY",
     title: "A Council That Listens",
-    text: "Every report lands in one live queue that council staff work through in real time. Residents and the council, fixing Kazungula together.",
+    text: "Every report lands in one live queue that council staff work through in real time. Residents and councils, fixing Zambia's towns together.",
   },
 ];
 
@@ -84,7 +84,7 @@ export default function Home() {
       <div className="bg-zblack text-xs text-gray-300">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-2 px-4 py-2">
           <span>
-            Kazungula Town Council · Official citizen reporting portal
+            Serving local councils across Zambia · Official citizen reporting portal
           </span>
           <span className="flex items-center gap-4">
             <span className="hidden sm:inline">
@@ -141,9 +141,10 @@ export default function Home() {
             Report a problem. <span className="text-zorange">Watch your town get fixed.</span>
           </h1>
           <p className="mt-4 max-w-xl text-lg text-gray-200">
-            FixZed is Kazungula Town Council's digital reporting platform. One photo is all it
-            takes — our AI classifies the issue, scores how precise your location is, and routes
-            it to the right department in seconds. Emergencies ring an alarm at the council, live.
+            FixZed is the citizen reporting platform for local councils across Zambia. One photo
+            is all it takes — our AI classifies the issue, scores how precise your location is,
+            and routes it to the right department in seconds. Emergencies ring an alarm at the
+            council, live.
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
             <Link
@@ -289,16 +290,16 @@ export default function Home() {
           <div>
             <p className="text-xs font-black tracking-widest text-zorange">ABOUT FIXZED</p>
             <h2 className="mt-1 text-3xl font-black text-white">
-              Built for Kazungula, with Kazungula
+              Built for Zambia's councils, with their communities
             </h2>
             <p className="mt-4 leading-relaxed text-gray-300">
-              FixZed is a civic technology platform developed for Kazungula Town Council. It turns
+              FixZed is a civic technology platform built for local councils across Zambia. It turns
               every resident's phone into a direct line to the people who maintain our roads,
               drains, water supply and public safety — and gives council staff one live dashboard
-              to see, prioritise and act on every issue in the district.
+              to see, prioritise and act on every issue in their district.
             </p>
             <p className="mt-3 leading-relaxed text-gray-400">
-              Transparent reporting. Faster response. A town that works for everyone.
+              Transparent reporting. Faster response. Towns that work for everyone.
             </p>
             <Link
               href="/report"
@@ -324,7 +325,7 @@ export default function Home() {
           <div>
             <Wordmark light className="text-2xl" />
             <p className="mt-3 leading-relaxed text-green-200">
-              The official citizen issue-reporting platform of Kazungula Town Council.
+              The official citizen issue-reporting platform for local councils across Zambia.
             </p>
           </div>
           <div>
@@ -341,12 +342,12 @@ export default function Home() {
             <ul className="mt-3 space-y-2">
               <li>Police Department: <b className="text-white">0975 170 412</b></li>
               <li>Fire & Rescue: via FixZed emergency report</li>
-              <li>Kazungula Town Council · Southern Province, Zambia</li>
+              <li>Serving councils nationwide · Zambia</li>
             </ul>
           </div>
         </div>
         <div className="border-t border-green-800 py-4 text-center text-xs text-green-200">
-          © {new Date().getFullYear()} FixZed · Kazungula Town Council. All rights reserved.
+          © {new Date().getFullYear()} FixZed · Citizen reporting for Zambia's local councils. All rights reserved.
         </div>
       </footer>
     </div>
