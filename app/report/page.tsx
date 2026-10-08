@@ -74,14 +74,14 @@ function scoreLocation(o: {
   return { score: s, level, reasons };
 }
 
-async function resize(file: File, max = 1024): Promise<Blob> {
+async function resize(file: File, max = 1024, quality = 0.8): Promise<Blob> {
   const bmp = await createImageBitmap(file);
   const scale = Math.min(1, max / Math.max(bmp.width, bmp.height));
   const canvas = document.createElement("canvas");
   canvas.width = bmp.width * scale;
   canvas.height = bmp.height * scale;
   canvas.getContext("2d")!.drawImage(bmp, 0, 0, canvas.width, canvas.height);
-  return new Promise((res) => canvas.toBlob((b) => res(b!), "image/jpeg", 0.8));
+  return new Promise((res) => canvas.toBlob((b) => res(b!), "image/jpeg", quality));
 }
 
 function toBase64(blob: Blob): Promise<string> {
@@ -130,6 +130,7 @@ export default function Report() {
   const [chosenCategory, setChosenCategory] = useState<string | null>(null);
 
   const imageRef = useRef<string | null>(null);
+  const [sizes, setSizes] = useState<{ orig: number; sent: number } | null>(null);
 
   const movedRef = useRef(false);
   const bestRef = useRef(Infinity);
@@ -312,8 +313,8 @@ export default function Report() {
     setSent(false);
     setAiResult(null);
     try {
-      const blob = await resize(file);
-      const image = await toBase64(blob);
+      const analysisBlob = await resize(file, 768, 0.65);
+      const image = await toBase64(analysisBlob);
       imageRef.current = image;
       const res = await fetch("/api/analyze", {
         method: "POST",
@@ -339,7 +340,8 @@ export default function Report() {
     setError("");
     setSent(false);
     try {
-      const blob = await resize(file);
+      const blob = await resize(file, 1600, 0.85);
+      setSizes({ orig: file.size, sent: blob.size });
 
       const path = `${crypto.randomUUID()}.jpg`;
       const up = await supabase.storage
@@ -468,6 +470,11 @@ export default function Report() {
             className="hidden"
             onChange={(e) => onPick(e.target.files?.[0] ?? null)}
           />
+          <p className="text-xs text-gray-500">
+            📉 <b>Data saver is on.</b> Photos are compressed only for transmission — the
+            council still receives a clear, full-colour picture, and the GPS location saved
+            inside your photo is kept.
+          </p>
 
           {forwarded && (
             <div className="rounded-xl border border-zred/50 bg-zred/10 p-3 text-sm">
@@ -787,6 +794,14 @@ export default function Report() {
               Thank you for helping improve your community. Your report has been analysed
               and added to the council&apos;s priority list.
             </p>
+            {sizes && sizes.orig > 0 && (
+              <p className="text-xs text-gray-600 mt-1">
+                📉 Data saver: {(sizes.orig / 1048576).toFixed(1)} MB on your phone →{" "}
+                {(sizes.sent / 1024).toFixed(0)} KB sent (
+                {Math.max(0, Math.round(100 - (sizes.sent / sizes.orig) * 100))}% less data
+                used).
+              </p>
+            )}
           </div>
         )}
       </main>

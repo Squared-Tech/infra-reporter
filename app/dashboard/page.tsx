@@ -181,6 +181,42 @@ export default function Dashboard() {
           ))}
         </div>
 
+        <div className="bg-white rounded-2xl shadow p-4 border border-gray-100 space-y-2">
+          <h2 className="text-lg font-extrabold">📬 Department queues (open cases)</h2>
+          <p className="text-xs text-gray-600">
+            Every report is routed straight to the responsible department. Tap a department
+            to see only its cases.
+          </p>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+            {DEPARTMENT_IDS.map((d) => {
+              const openCount = base.filter(
+                (r) => (r.department ?? "general") === d && r.status !== "fixed"
+              ).length;
+              return (
+                <button
+                  key={d}
+                  onClick={() => setDept(d === dept ? "" : d)}
+                  className={`flex items-center gap-2 rounded-xl border-2 p-3 text-left transition ${
+                    dept === d
+                      ? "border-zdeep bg-zdeep/10"
+                      : "border-gray-200 bg-white hover:border-zdeep/50"
+                  }`}
+                >
+                  <span className="text-2xl">{deptInfo(d).emoji}</span>
+                  <span className="flex-1 text-xs font-semibold leading-tight">
+                    {deptInfo(d).name}
+                  </span>
+                  <span
+                    className={`text-xl font-black ${openCount > 0 ? "text-zred" : "text-gray-300"}`}
+                  >
+                    {openCount}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
         <div className="bg-white rounded-2xl shadow p-4 space-y-3 border border-gray-100">
           <div className="flex items-center justify-between flex-wrap gap-2">
             <h2 className="text-lg font-extrabold">🗺️ Filter by area</h2>
