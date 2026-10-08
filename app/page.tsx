@@ -87,9 +87,6 @@ export default function Home() {
             Serving local councils across Zambia · Official citizen reporting portal
           </span>
           <span className="flex items-center gap-4">
-            <span className="hidden sm:inline">
-              Police emergency line: <b className="text-white">0975 170 412</b>
-            </span>
             {role ? (
               <Link href="/dashboard" className="font-semibold text-zorange hover:underline">
                 Council / Admin login →
@@ -340,7 +337,6 @@ export default function Home() {
           <div>
             <h3 className="font-bold text-white">Emergency contacts</h3>
             <ul className="mt-3 space-y-2">
-              <li>Police Department: <b className="text-white">0975 170 412</b></li>
               <li>Fire & Rescue: via FixZed emergency report</li>
               <li>Serving councils nationwide · Zambia</li>
             </ul>

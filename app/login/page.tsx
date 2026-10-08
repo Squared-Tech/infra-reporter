@@ -107,19 +107,32 @@ export default function Login() {
     "w-full border border-gray-300 rounded-xl p-3 focus:outline-none focus:ring-2 focus:ring-zgreen";
 
   return (
-    <div className="min-h-screen flex flex-col">
-      <header className="bg-zgreen">
-        <div className="max-w-md mx-auto px-5 py-4">
-          <a href="/">
-            <Wordmark light className="text-2xl" />
-          </a>
-        </div>
-        <Stripe />
+    <div className="relative flex min-h-screen flex-col">
+      {/* Live photo backdrop */}
+      <div className="fixed inset-0 -z-10">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src="/img/community.png"
+          alt="Residents joining hands in unity"
+          className="h-full w-full object-cover"
+        />
+        <div className="absolute inset-0 bg-gradient-to-b from-zblack/80 via-zblack/60 to-zblack/80" />
+      </div>
+
+      <Stripe />
+      <header className="mx-auto w-full max-w-md px-5 py-5 text-center">
+        <a href="/">
+          <Wordmark light className="text-3xl" />
+        </a>
+        <p className="mt-1 text-xs font-semibold uppercase tracking-widest text-green-200">
+          Citizen reporting for Zambia's local councils
+        </p>
       </header>
 
-      <main className="max-w-md w-full mx-auto p-5 flex-1">
+      <main className="flex flex-1 items-center justify-center p-5">
+        <div className="w-full max-w-md">
         {sentTo ? (
-          <div className="bg-white rounded-2xl shadow p-6 text-center space-y-3 border-t-4 border-zorange">
+          <div className="rounded-2xl border-4 border-zorange bg-white p-6 text-center space-y-3 shadow-2xl">
             <div className="text-5xl">📧</div>
             <h1 className="text-2xl font-extrabold">Enter your code</h1>
             <p className="text-gray-600">
@@ -165,7 +178,7 @@ export default function Login() {
             </div>
           </div>
         ) : (
-          <div className="bg-white rounded-2xl shadow p-6 space-y-3 border-t-4 border-zgreen">
+          <div className="rounded-2xl border-4 border-zgreen bg-white p-6 space-y-3 shadow-2xl">
             <h1 className="text-3xl font-extrabold">
               {mode === "in" ? "Welcome back" : "Welcome to "}
               {mode === "up" && (
@@ -226,6 +239,7 @@ export default function Login() {
             </button>
           </div>
         )}
+        </div>
       </main>
     </div>
   );
