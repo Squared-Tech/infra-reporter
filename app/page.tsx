@@ -64,7 +64,9 @@ const STATS = [
 ];
 
 export default function Home() {
-  const { ready, role } = useAuth();
+  // allowAnonymous: visitors without a session must see the landing page,
+  // not get bounced to /login.
+  const { ready, role } = useAuth(undefined, true);
   const router = useRouter();
 
   // Staff go straight to their dashboard; citizens see the landing page.

@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "./supabase";
 
-export function useAuth(required?: "council") {
+export function useAuth(required?: "council", allowAnonymous?: boolean) {
   const router = useRouter();
   const [ready, setReady] = useState(false);
   const [role, setRole] = useState<string | null>(null);
@@ -14,7 +14,8 @@ export function useAuth(required?: "council") {
       const { data } = await supabase.auth.getSession();
       const user = data.session?.user;
       if (!user) {
-        router.replace("/login");
+        if (!allowAnonymous) router.replace("/login");
+        setReady(true);
         return;
       }
       const { data: p } = await supabase
