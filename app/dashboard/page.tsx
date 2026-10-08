@@ -47,6 +47,8 @@ export default function Dashboard() {
   const [prov, setProv] = useState("");
   const [dist, setDist] = useState("");
   const [dept, setDept] = useState("");
+  const [alarm, setAlarm] = useState<any | null>(null);
+  const [live, setLive] = useState(false);
 
   async function load() {
     const { data } = await supabase
@@ -63,6 +65,64 @@ export default function Dashboard() {
 
   useEffect(() => {
     if (ready) load();
+  }, [ready]);
+
+  // Two-tone siren via WebAudio (no external audio file needed).
+  function playSiren() {
+    try {
+      const Ctx =
+        window.AudioContext || (window as any).webkitAudioContext;
+      const ctx = new Ctx();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "sawtooth";
+      gain.gain.value = 0.15;
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      const t = ctx.currentTime;
+      for (let i = 0; i < 6; i++) {
+        osc.frequency.setValueAtTime(i % 2 === 0 ? 880 : 620, t + i * 0.5);
+      }
+      osc.start(t);
+      osc.stop(t + 3);
+      osc.onended = () => ctx.close();
+    } catch {}
+  }
+
+  // Live emergency alarm: flash + siren when a new urgent report lands.
+  useEffect(() => {
+    if (!ready) return;
+    const ch = supabase
+      .channel("fixzed-reports-live")
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "reports" },
+        (payload: any) => {
+          const r = payload.new;
+          if (!r) return;
+          setReports((prev) => [r, ...prev]);
+          const urgent = deptInfo(r.department).emergency || (r.severity ?? 0) >= 4;
+          if (urgent) {
+            setAlarm(r);
+            playSiren();
+            if (typeof Notification !== "undefined" && Notification.permission === "granted") {
+              new Notification(`🚨 FIXZED ${deptInfo(r.department).name}`, {
+                body: `${catInfo(r.category).label} (severity ${r.severity}/5) — ${
+                  r.address ?? "location pending"
+                }`,
+              });
+            }
+          }
+        }
+      )
+      .subscribe((status: string) => setLive(status === "SUBSCRIBED"));
+
+    if (typeof Notification !== "undefined" && Notification.permission === "default") {
+      Notification.requestPermission().catch(() => {});
+    }
+    return () => {
+      supabase.removeChannel(ch);
+    };
   }, [ready]);
 
   const base = useMemo(
@@ -145,6 +205,19 @@ export default function Dashboard() {
             </a>
             <span className="hidden sm:inline bg-white/15 rounded-full px-3 py-1 text-sm font-semibold">
               Council dashboard
+            </span>
+            <span
+              className={`rounded-full px-3 py-1 text-sm font-bold flex items-center gap-1.5 ${
+                live ? "bg-zred text-white" : "bg-white/15 text-white/70"
+              }`}
+              title={live ? "Watching for new reports in real time" : "Connecting live feed..."}
+            >
+              <span
+                className={`inline-block w-2 h-2 rounded-full ${
+                  live ? "bg-white animate-pulse" : "bg-white/40"
+                }`}
+              />
+              {live ? "LIVE" : "..."}
             </span>
           </div>
           <div className="flex items-center gap-3 text-sm">
@@ -462,6 +535,37 @@ export default function Dashboard() {
           </section>
         ))}
       </main>
+
+      {alarm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70">
+          <div className="w-full max-w-md rounded-3xl overflow-hidden shadow-2xl animate-pulse bg-zred text-white">
+            <div className="p-6 space-y-3 text-center">
+              <p className="text-6xl">🚨</p>
+              <h2 className="text-2xl font-black uppercase tracking-wide">
+                Emergency report
+              </h2>
+              <p className="text-lg font-bold">
+                {deptInfo(alarm.department).emoji} {deptInfo(alarm.department).name}
+              </p>
+              <p className="text-white/90">
+                {catInfo(alarm.category).label} · severity {alarm.severity}/5
+              </p>
+              <p className="text-sm text-white/80">
+                📍 {alarm.address ?? "Location pending"}
+                {alarm.province ? ` · ${alarm.province}` : ""}
+                {alarm.district ? ` / ${alarm.district}` : ""}
+              </p>
+              <p className="text-sm text-white/80">{alarm.reason}</p>
+              <button
+                onClick={() => setAlarm(null)}
+                className="w-full bg-white text-zred font-black rounded-xl p-3 hover:brightness-95"
+              >
+                Acknowledge & view queue
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
