@@ -1,8 +1,9 @@
 "use client";
 import dynamic from "next/dynamic";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/useAuth";
+import { playSiren } from "@/lib/siren";
 import { Stripe, Wordmark } from "@/components/Brand";
 import { PROVINCES } from "@/lib/zambia";
 import { DEPARTMENT_IDS, deptInfo, catInfo } from "@/lib/departments";
@@ -66,52 +67,6 @@ export default function Dashboard() {
   useEffect(() => {
     if (ready) load();
   }, [ready]);
-
-  // Shared AudioContext, unlocked on first user gesture (browsers block autoplay).
-  const audioRef = useRef<any>(null);
-  function audioCtx() {
-    if (!audioRef.current) {
-      const Ctx = window.AudioContext || (window as any).webkitAudioContext;
-      audioRef.current = new Ctx();
-    }
-    if (audioRef.current.state === "suspended") {
-      audioRef.current.resume().catch(() => {});
-    }
-    return audioRef.current;
-  }
-
-  useEffect(() => {
-    const unlock = () => {
-      try {
-        audioCtx();
-      } catch {}
-    };
-    window.addEventListener("pointerdown", unlock);
-    window.addEventListener("keydown", unlock);
-    return () => {
-      window.removeEventListener("pointerdown", unlock);
-      window.removeEventListener("keydown", unlock);
-    };
-  }, []);
-
-  // Two-tone siren via WebAudio (no external audio file needed).
-  function playSiren() {
-    try {
-      const ctx = audioCtx();
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.type = "sawtooth";
-      gain.gain.value = 0.3;
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      const t = ctx.currentTime;
-      for (let i = 0; i < 6; i++) {
-        osc.frequency.setValueAtTime(i % 2 === 0 ? 988 : 660, t + i * 0.4);
-      }
-      osc.start(t);
-      osc.stop(t + 2.4);
-    } catch {}
-  }
 
   // Repeat the siren every 3s while the alarm overlay is up.
   useEffect(() => {
@@ -589,10 +544,7 @@ export default function Dashboard() {
               <p className="text-sm text-white/80">{alarm.reason}</p>
               <button
                 onClick={() => {
-                  try {
-                    audioCtx();
-                    playSiren();
-                  } catch {}
+                  playSiren();
                 }}
                 className="w-full bg-zorange text-white font-black rounded-xl p-3 hover:brightness-110"
               >
