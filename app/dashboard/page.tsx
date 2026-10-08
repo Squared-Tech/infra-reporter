@@ -588,6 +588,17 @@ export default function Dashboard() {
               </p>
               <p className="text-sm text-white/80">{alarm.reason}</p>
               <button
+                onClick={() => {
+                  try {
+                    audioCtx();
+                    playSiren();
+                  } catch {}
+                }}
+                className="w-full bg-zorange text-white font-black rounded-xl p-3 hover:brightness-110"
+              >
+                🔊 Tap for sound
+              </button>
+              <button
                 onClick={() => setAlarm(null)}
                 className="w-full bg-white text-zred font-black rounded-xl p-3 hover:brightness-95"
               >
