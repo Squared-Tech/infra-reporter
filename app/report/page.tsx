@@ -400,13 +400,14 @@ export default function Report() {
       });
       const aj = await alertRes.json().catch(() => null);
       const dName = deptInfo(deptOf(chosenCategory)).name;
+      const channel = aj?.provider === "whatsapp" ? "WhatsApp message" : "SMS";
       setAlertMsg(
         aj?.status === "sent"
           ? aj.call && aj.sms
-            ? `🚨 ${dName} alerted: flash call + SMS sent to ${aj.phone}.`
+            ? `🚨 ${dName} alerted: flash call + ${channel} sent to ${aj.phone}.`
             : aj.call
             ? `📞 ${dName} alerted by flash call to ${aj.phone}.`
-            : `📨 ${dName} notified by SMS to ${aj.phone}.`
+            : `📨 ${dName} notified by ${channel} to ${aj.phone}.`
           : aj?.status === "skipped"
           ? `ℹ️ Report saved. Alert not sent yet (${aj.reason}).`
           : "⚠️ Report saved, but the alert failed to send."

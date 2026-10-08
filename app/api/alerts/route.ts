@@ -87,6 +87,44 @@ async function vonageSms(to: string, message: string): Promise<SendResult> {
   };
 }
 
+// ---- WhatsApp Cloud API (primary text channel) ----
+// Template body must be created in the Meta dashboard as:
+//   FIXZED {{1}}: {{2}} (severity {{3}}/5) at {{4}}. Check your emergency portal now: {{5}}
+
+async function waText(to: string, vars: string[]): Promise<SendResult> {
+  const phoneId = process.env.WHATSAPP_PHONE_ID!;
+  const digits = to.replace(/\D/g, "");
+  const r = await fetch(`https://graph.facebook.com/v21.0/${phoneId}/messages`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${process.env.WHATSAPP_TOKEN!}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      messaging_product: "whatsapp",
+      to: digits,
+      type: "template",
+      template: {
+        name: process.env.WHATSAPP_TEMPLATE || "fixzed_alert",
+        language: { code: "en" },
+        components: [
+          {
+            type: "body",
+            parameters: vars.map((text) => ({ type: "text", text })),
+          },
+        ],
+      },
+    }),
+  });
+  const data = await r.json().catch(() => ({}));
+  const ok = r.ok && !!data?.messages?.[0]?.id;
+  return {
+    ok,
+    detail: ok ? "whatsapp" : `whatsapp: ${data?.error?.message ?? r.status}`,
+    provider: "whatsapp",
+  };
+}
+
 export async function POST(req: Request) {
   const body = await req.json().catch(() => ({}));
   const { department, category, severity, address, reportId } = body ?? {};
@@ -102,10 +140,11 @@ export async function POST(req: Request) {
 
   const atOn = !!process.env.AFRICASTALKING_API_KEY;
   const vonageOn = !!process.env.VONAGE_API_KEY && !!process.env.VONAGE_API_SECRET;
-  if (!atOn && !vonageOn) {
+  const waOn = !!process.env.WHATSAPP_TOKEN && !!process.env.WHATSAPP_PHONE_ID;
+  if (!atOn && !vonageOn && !waOn) {
     return NextResponse.json({
       status: "skipped",
-      reason: "no SMS provider configured (set Africa's Talking or Vonage env vars)",
+      reason: "no alert provider configured (set WhatsApp, Africa's Talking or Vonage env vars)",
     });
   }
 
@@ -129,8 +168,21 @@ export async function POST(req: Request) {
     else errors.push(c.detail);
   }
 
-  // SMS: try Africa's Talking first (option 2), fall through to Vonage (option 3).
-  if (atOn) {
+  // Text: WhatsApp first, then Africa's Talking, then Vonage.
+  if (waOn) {
+    const w = await waText(dept.phone, [
+      dept.emergency ? "EMERGENCY" : "ALERT",
+      cat.label,
+      String(severity ?? "?"),
+      address || "unknown location",
+      `${origin}/dashboard Ref ${ref}`,
+    ]);
+    if (w.ok) {
+      smsSent = true;
+      smsProvider = "whatsapp";
+    } else errors.push(w.detail);
+  }
+  if (!smsSent && atOn) {
     const a = await atSms(dept.phone, smsBody);
     if (a.ok) {
       smsSent = true;
