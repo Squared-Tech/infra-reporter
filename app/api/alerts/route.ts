@@ -1,17 +1,24 @@
 import { NextResponse } from "next/server";
 import { deptInfo, catInfo } from "@/lib/departments";
 
-const TWILIO = "https://api.twilio.com/2010-04-01/Accounts";
+const AT_BASE = "https://api.africastalking.com/version1";
 
-async function twilio(path: string, form: URLSearchParams) {
-  const sid = process.env.TWILIO_ACCOUNT_SID!;
-  const token = process.env.TWILIO_AUTH_TOKEN!;
-  const r = await fetch(`${TWILIO}/${sid}/${path}`, {
+function atHeaders() {
+  return {
+    apiKey: process.env.AFRICASTALKING_API_KEY!,
+    Accept: "application/json",
+    "Content-Type": "application/x-www-form-urlencoded",
+  };
+}
+
+function username() {
+  return process.env.AFRICASTALKING_USERNAME || "sandbox";
+}
+
+async function atPost(path: string, form: URLSearchParams) {
+  const r = await fetch(`${AT_BASE}/${path}`, {
     method: "POST",
-    headers: {
-      Authorization: `Basic ${Buffer.from(`${sid}:${token}`).toString("base64")}`,
-      "Content-Type": "application/x-www-form-urlencoded",
-    },
+    headers: atHeaders(),
     body: form.toString(),
   });
   const data = await r.json().catch(() => ({}));
@@ -30,10 +37,10 @@ export async function POST(req: Request) {
       reason: `no phone number configured for ${dept.name}`,
     });
   }
-  if (!process.env.TWILIO_ACCOUNT_SID || !process.env.TWILIO_AUTH_TOKEN || !process.env.TWILIO_FROM) {
+  if (!process.env.AFRICASTALKING_API_KEY) {
     return NextResponse.json({
       status: "skipped",
-      reason: "Twilio credentials not set on the server",
+      reason: "Africa's Talking API key not set on the server",
     });
   }
 
@@ -45,37 +52,43 @@ export async function POST(req: Request) {
     `(severity ${severity ?? "?"}/5)${where}. ` +
     `Check your emergency portal now: ${origin}/dashboard  Ref ${ref}`;
 
-  let callSid: string | null = null;
-  let smsSid: string | null = null;
+  let callSent = false;
+  let smsSent = false;
   const errors: string[] = [];
 
-  if (dept.emergency) {
+  // Flash / missed call for emergency departments (ring, no answer expected).
+  const voiceFrom = process.env.AFRICASTALKING_VOICE_FROM;
+  if (dept.emergency && voiceFrom) {
     const callForm = new URLSearchParams({
-      From: process.env.TWILIO_FROM!,
-      To: dept.phone,
-      Timeout: "20",
-      Twiml: "<Response><Hangup/></Response>",
+      username: username(),
+      from: voiceFrom,
+      to: dept.phone,
     });
-    const c = await twilio("Calls.json", callForm);
-    if (c.ok) callSid = c.data.sid ?? null;
-    else errors.push(`call: ${c.data?.message ?? "failed"}`);
+    const c = await atPost("calling", callForm);
+    const entry = c.data?.entries?.[0];
+    if (c.ok && entry && entry.status !== "Failed") callSent = true;
+    else errors.push(`call: ${entry?.errorMessage ?? c.data?.errorMessage ?? "failed"}`);
   }
 
+  // Follow-up SMS ("check your emergency portal").
   const smsForm = new URLSearchParams({
-    From: process.env.TWILIO_FROM!,
-    To: dept.phone,
-    Body: smsBody,
+    username: username(),
+    to: dept.phone,
+    message: smsBody,
   });
-  const s = await twilio("Messages.json", smsForm);
-  if (s.ok) smsSid = s.data.sid ?? null;
-  else errors.push(`sms: ${s.data?.message ?? "failed"}`);
+  const smsFrom = process.env.AFRICASTALKING_SMS_FROM;
+  if (smsFrom) smsForm.set("from", smsFrom);
+  const s = await atPost("messaging", smsForm);
+  const recip = s.data?.SMSMessageData?.Recipients?.[0];
+  if (s.ok && (!recip || recip.status === "Success")) smsSent = true;
+  else errors.push(`sms: ${recip?.statusCode ?? s.data?.SMSMessageData?.Message ?? "failed"}`);
 
-  if (callSid || smsSid) {
+  if (callSent || smsSent) {
     return NextResponse.json({
       status: "sent",
       phone: dept.phone,
-      call: callSid,
-      sms: smsSid,
+      call: callSent,
+      sms: smsSent,
       emergency: dept.emergency,
     });
   }

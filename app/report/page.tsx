@@ -402,8 +402,10 @@ export default function Report() {
       const dName = deptInfo(deptOf(chosenCategory)).name;
       setAlertMsg(
         aj?.status === "sent"
-          ? aj.emergency
+          ? aj.call && aj.sms
             ? `🚨 ${dName} alerted: flash call + SMS sent to ${aj.phone}.`
+            : aj.call
+            ? `📞 ${dName} alerted by flash call to ${aj.phone}.`
             : `📨 ${dName} notified by SMS to ${aj.phone}.`
           : aj?.status === "skipped"
           ? `ℹ️ Report saved. Alert not sent yet (${aj.reason}).`
