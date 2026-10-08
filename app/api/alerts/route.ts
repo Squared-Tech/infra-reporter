@@ -3,26 +3,88 @@ import { deptInfo, catInfo } from "@/lib/departments";
 
 const AT_BASE = "https://api.africastalking.com/version1";
 
-function atHeaders() {
-  return {
-    apiKey: process.env.AFRICASTALKING_API_KEY!,
-    Accept: "application/json",
-    "Content-Type": "application/x-www-form-urlencoded",
-  };
-}
+type SendResult = { ok: boolean; detail: string; provider: string };
 
-function username() {
-  return process.env.AFRICASTALKING_USERNAME || "sandbox";
-}
+// ---- Africa's Talking (primary: option 2, needs a dedicated Sender ID for Zambia) ----
 
-async function atPost(path: string, form: URLSearchParams) {
-  const r = await fetch(`${AT_BASE}/${path}`, {
+async function atSms(to: string, message: string): Promise<SendResult> {
+  const form = new URLSearchParams({
+    username: process.env.AFRICASTALKING_USERNAME || "sandbox",
+    to,
+    message,
+  });
+  const from = process.env.AFRICASTALKING_SMS_FROM;
+  if (from) form.set("from", from);
+  const r = await fetch(`${AT_BASE}/messaging`, {
     method: "POST",
-    headers: atHeaders(),
+    headers: {
+      apiKey: process.env.AFRICASTALKING_API_KEY!,
+      Accept: "application/json",
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
     body: form.toString(),
   });
   const data = await r.json().catch(() => ({}));
-  return { ok: r.ok, data };
+  const recip = data?.SMSMessageData?.Recipients?.[0];
+  const ok = r.ok && (!recip || recip.status === "Success");
+  return {
+    ok,
+    detail: ok ? "africastalking" : `africastalking: ${recip?.status ?? data?.SMSMessageData?.Message ?? r.status}`,
+    provider: "africastalking",
+  };
+}
+
+async function atCall(to: string): Promise<SendResult> {
+  const from = process.env.AFRICASTALKING_VOICE_FROM;
+  if (!from) return { ok: false, detail: "no voice number", provider: "africastalking" };
+  const form = new URLSearchParams({
+    username: process.env.AFRICASTALKING_USERNAME || "sandbox",
+    from,
+    to,
+  });
+  const r = await fetch(`${AT_BASE}/calling`, {
+    method: "POST",
+    headers: {
+      apiKey: process.env.AFRICASTALKING_API_KEY!,
+      Accept: "application/json",
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+    body: form.toString(),
+  });
+  const data = await r.json().catch(() => ({}));
+  const entry = data?.entries?.[0];
+  const ok = r.ok && !!entry && entry.status !== "Failed";
+  return {
+    ok,
+    detail: ok ? "africastalking" : `africastalking call: ${entry?.errorMessage ?? data?.errorMessage ?? r.status}`,
+    provider: "africastalking",
+  };
+}
+
+// ---- Vonage (fallback: option 3) ----
+
+async function vonageSms(to: string, message: string): Promise<SendResult> {
+  const form = new URLSearchParams({
+    api_key: process.env.VONAGE_API_KEY!,
+    api_secret: process.env.VONAGE_API_SECRET!,
+    from: process.env.VONAGE_FROM || "FixZed",
+    to,
+    text: message,
+    type: "text",
+  });
+  const r = await fetch("https://rest.nexmo.com/sms/json", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: form.toString(),
+  });
+  const data = await r.json().catch(() => ({}));
+  const msg = data?.messages?.[0];
+  const ok = r.ok && msg?.status === "0";
+  return {
+    ok,
+    detail: ok ? "vonage" : `vonage: ${msg?.["error-text"] ?? r.status}`,
+    provider: "vonage",
+  };
 }
 
 export async function POST(req: Request) {
@@ -37,10 +99,13 @@ export async function POST(req: Request) {
       reason: `no phone number configured for ${dept.name}`,
     });
   }
-  if (!process.env.AFRICASTALKING_API_KEY) {
+
+  const atOn = !!process.env.AFRICASTALKING_API_KEY;
+  const vonageOn = !!process.env.VONAGE_API_KEY && !!process.env.VONAGE_API_SECRET;
+  if (!atOn && !vonageOn) {
     return NextResponse.json({
       status: "skipped",
-      reason: "Africa's Talking API key not set on the server",
+      reason: "no SMS provider configured (set Africa's Talking or Vonage env vars)",
     });
   }
 
@@ -52,36 +117,33 @@ export async function POST(req: Request) {
     `(severity ${severity ?? "?"}/5)${where}. ` +
     `Check your emergency portal now: ${origin}/dashboard  Ref ${ref}`;
 
+  const errors: string[] = [];
   let callSent = false;
   let smsSent = false;
-  const errors: string[] = [];
+  let smsProvider = "";
 
   // Flash / missed call for emergency departments (ring, no answer expected).
-  const voiceFrom = process.env.AFRICASTALKING_VOICE_FROM;
-  if (dept.emergency && voiceFrom) {
-    const callForm = new URLSearchParams({
-      username: username(),
-      from: voiceFrom,
-      to: dept.phone,
-    });
-    const c = await atPost("calling", callForm);
-    const entry = c.data?.entries?.[0];
-    if (c.ok && entry && entry.status !== "Failed") callSent = true;
-    else errors.push(`call: ${entry?.errorMessage ?? c.data?.errorMessage ?? "failed"}`);
+  if (dept.emergency && atOn && process.env.AFRICASTALKING_VOICE_FROM) {
+    const c = await atCall(dept.phone);
+    if (c.ok) callSent = true;
+    else errors.push(c.detail);
   }
 
-  // Follow-up SMS ("check your emergency portal").
-  const smsForm = new URLSearchParams({
-    username: username(),
-    to: dept.phone,
-    message: smsBody,
-  });
-  const smsFrom = process.env.AFRICASTALKING_SMS_FROM;
-  if (smsFrom) smsForm.set("from", smsFrom);
-  const s = await atPost("messaging", smsForm);
-  const recip = s.data?.SMSMessageData?.Recipients?.[0];
-  if (s.ok && (!recip || recip.status === "Success")) smsSent = true;
-  else errors.push(`sms: ${recip?.statusCode ?? s.data?.SMSMessageData?.Message ?? "failed"}`);
+  // SMS: try Africa's Talking first (option 2), fall through to Vonage (option 3).
+  if (atOn) {
+    const a = await atSms(dept.phone, smsBody);
+    if (a.ok) {
+      smsSent = true;
+      smsProvider = "africastalking";
+    } else errors.push(a.detail);
+  }
+  if (!smsSent && vonageOn) {
+    const v = await vonageSms(dept.phone, smsBody);
+    if (v.ok) {
+      smsSent = true;
+      smsProvider = "vonage";
+    } else errors.push(v.detail);
+  }
 
   if (callSent || smsSent) {
     return NextResponse.json({
@@ -89,6 +151,7 @@ export async function POST(req: Request) {
       phone: dept.phone,
       call: callSent,
       sms: smsSent,
+      provider: smsProvider,
       emergency: dept.emergency,
     });
   }
