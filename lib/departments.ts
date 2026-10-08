@@ -9,42 +9,56 @@ export type DepartmentId =
 
 export const DEPARTMENTS: Record<
   DepartmentId,
-  { name: string; emoji: string; blurb: string }
+  { name: string; emoji: string; blurb: string; phone: string; emergency: boolean }
 > = {
   fire_rescue: {
     name: "Fire and Rescue Services Unit",
     emoji: "🚒",
     blurb: "Fires, rescues, trapped persons, electrical safety",
+    phone: "",
+    emergency: true,
   },
   police: {
     name: "Police Department",
     emoji: "🚔",
     blurb: "Petty crime, vandalism, public safety",
+    phone: "+260975170412",
+    emergency: true,
   },
   solid_waste: {
     name: "Solid Waste Management",
     emoji: "🗑️",
     blurb: "Rubbish, illegal dumping, litter",
+    phone: "",
+    emergency: false,
   },
   water_sanitation: {
     name: "Water and Sanitation",
     emoji: "💧",
     blurb: "Drains, leaks, sewage, water supply",
+    phone: "",
+    emergency: false,
   },
   veterinary: {
     name: "Veterinary Services",
     emoji: "🐾",
     blurb: "Stray, dead or dangerous animals",
+    phone: "",
+    emergency: false,
   },
   road_maintenance: {
     name: "Road Maintenance Department",
     emoji: "🚧",
     blurb: "Potholes, road damage, street lights",
+    phone: "",
+    emergency: false,
   },
   general: {
     name: "General Council Office",
     emoji: "🏛️",
     blurb: "Anything else the council should see",
+    phone: "",
+    emergency: false,
   },
 };
 

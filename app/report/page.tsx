@@ -131,6 +131,7 @@ export default function Report() {
 
   const imageRef = useRef<string | null>(null);
   const [sizes, setSizes] = useState<{ orig: number; sent: number } | null>(null);
+  const [alertMsg, setAlertMsg] = useState("");
 
   const movedRef = useRef(false);
   const bestRef = useRef(Infinity);
@@ -339,6 +340,7 @@ export default function Report() {
     setBusy(true);
     setError("");
     setSent(false);
+    setAlertMsg("");
     try {
       const blob = await resize(file, 1600, 0.85);
       setSizes({ orig: file.size, sent: blob.size });
@@ -381,8 +383,33 @@ export default function Report() {
         reason: aiResult.reason,
         suggested_action: aiResult.suggested_action,
         note,
-      });
+      }).select("id").maybeSingle();
       if (ins.error) throw ins.error;
+      const newId = (ins as { data: { id?: string } | null }).data?.id ?? null;
+
+      const alertRes = await fetch("/api/alerts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          reportId: newId,
+          department: deptOf(chosenCategory),
+          category: chosenCategory,
+          severity: aiResult.severity,
+          address,
+        }),
+      });
+      const aj = await alertRes.json().catch(() => null);
+      const dName = deptInfo(deptOf(chosenCategory)).name;
+      setAlertMsg(
+        aj?.status === "sent"
+          ? aj.emergency
+            ? `🚨 ${dName} alerted: flash call + SMS sent to ${aj.phone}.`
+            : `📨 ${dName} notified by SMS to ${aj.phone}.`
+          : aj?.status === "skipped"
+          ? `ℹ️ Report saved. Alert not sent yet (${aj.reason}).`
+          : "⚠️ Report saved, but the alert failed to send."
+      );
+
       setSent(true);
       setNote("");
       setProvince("");
@@ -802,6 +829,7 @@ export default function Report() {
                 used).
               </p>
             )}
+            {alertMsg && <p className="text-sm font-semibold text-zdeep mt-1">{alertMsg}</p>}
           </div>
         )}
       </main>
