@@ -616,12 +616,23 @@ export default function Report() {
                         </p>
                       </div>
                     )}
-                    <button
-                      onClick={() => setStep("photo")}
-                      className="w-full rounded-xl bg-zgreen p-3 font-bold text-white hover:brightness-110"
-                    >
-                      Next →
-                    </button>
+                    <div className="flex gap-3">
+                      <button
+                        onClick={() => {
+                          sceneRef.current = null;
+                          setScene(null);
+                        }}
+                        className="flex-1 rounded-xl border-2 border-gray-300 p-3 font-bold text-gray-600 hover:bg-gray-100"
+                      >
+                        ← Back
+                      </button>
+                      <button
+                        onClick={() => setStep("photo")}
+                        className="flex-1 rounded-xl bg-zgreen p-3 font-bold text-white hover:brightness-110"
+                      >
+                        Next →
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>

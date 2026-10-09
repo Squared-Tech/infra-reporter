@@ -5,7 +5,7 @@ import { useAuth } from "@/lib/useAuth";
 import { Stripe, Wordmark } from "@/components/Brand";
 
 export default function Where() {
-  const { ready } = useAuth();
+  const { ready, email, logout } = useAuth();
   const router = useRouter();
   const [scene, setScene] = useState<"yes" | "no" | null>(null);
 
@@ -22,6 +22,15 @@ export default function Where() {
           className="h-full w-full object-cover"
         />
         <div className="absolute inset-0 bg-white/70" />
+      </div>
+
+      <div className="fixed right-3 top-3 z-10 flex items-center gap-2 rounded-full border border-zgreen/40 bg-white/90 px-3 py-1 text-xs shadow">
+        <span className="hidden max-w-[160px] truncate font-semibold text-gray-600 sm:inline">
+          {email}
+        </span>
+        <button onClick={logout} className="font-bold text-zdeep underline hover:no-underline">
+          Log out
+        </button>
       </div>
 
       <Stripe />
