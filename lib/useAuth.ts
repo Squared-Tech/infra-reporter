@@ -26,7 +26,7 @@ export function useAuth(required?: "council", allowAnonymous?: boolean) {
       const r = p?.role ?? "citizen";
       const isCouncil = r === "council" || r === "admin";
       if (required === "council" && !isCouncil) {
-        router.replace("/report");
+        router.replace("/where");
         return;
       }
       setRole(r);

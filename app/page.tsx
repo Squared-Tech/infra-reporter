@@ -113,7 +113,7 @@ export default function Home() {
             <a href="#about" className="hover:text-zgreen">About</a>
           </nav>
           <Link
-            href="/report"
+            href="/where"
             className="rounded-lg bg-zgreen px-4 py-2 text-sm font-bold text-white shadow hover:bg-zdeep"
           >
             Report an issue
@@ -147,7 +147,7 @@ export default function Home() {
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
             <Link
-              href="/report"
+              href="/where"
               className="rounded-lg bg-zgreen px-6 py-3 text-base font-bold text-white shadow-lg hover:bg-zdeep"
             >
               📷 Report an issue now
@@ -228,7 +228,7 @@ export default function Home() {
             </p>
           </div>
           <Link
-            href="/report"
+            href="/where"
             className="rounded-lg bg-white px-6 py-3 font-bold text-zred shadow hover:bg-red-50"
           >
             Report an emergency
@@ -301,7 +301,7 @@ export default function Home() {
               Transparent reporting. Faster response. Towns that work for everyone.
             </p>
             <Link
-              href="/report"
+              href="/where"
               className="mt-6 inline-block rounded-lg bg-zorange px-6 py-3 font-bold text-white shadow hover:brightness-110"
             >
               Make your first report
@@ -330,7 +330,7 @@ export default function Home() {
           <div>
             <h3 className="font-bold text-white">Quick links</h3>
             <ul className="mt-3 space-y-2">
-              <li><Link href="/report" className="hover:text-white">Report an issue</Link></li>
+              <li><Link href="/where" className="hover:text-white">Report an issue</Link></li>
               <li><Link href="/login" className="hover:text-white">Staff login</Link></li>
               <li><a href="#services" className="hover:text-white">Services</a></li>
               <li><a href="#how" className="hover:text-white">How it works</a></li>

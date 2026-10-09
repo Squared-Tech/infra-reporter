@@ -23,7 +23,7 @@ export default function Login() {
       .eq("id", userId)
       .single();
     router.replace(
-      p?.role === "council" || p?.role === "admin" ? "/dashboard" : "/report"
+      p?.role === "council" || p?.role === "admin" ? "/dashboard" : "/where"
     );
   }
 

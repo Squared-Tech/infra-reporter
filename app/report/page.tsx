@@ -105,6 +105,16 @@ async function lookupAddress(lat: number, lng: number): Promise<string | null> {
   }
 }
 
+const STEPS = [
+  { id: "brief", label: "Where are you?" },
+  { id: "photo", label: "Add a photo" },
+  { id: "details", label: "Your details" },
+  { id: "pin", label: "Pin the spot" },
+  { id: "check", label: "AI check" },
+  { id: "category", label: "Confirm & send" },
+] as const;
+type StepId = (typeof STEPS)[number]["id"];
+
 export default function Report() {
   const { ready, role, email, logout } = useAuth();
   const [file, setFile] = useState<File | null>(null);
@@ -128,6 +138,7 @@ export default function Report() {
   const [sent, setSent] = useState(false);
   const [aiResult, setAiResult] = useState<any | null>(null);
   const [chosenCategory, setChosenCategory] = useState<string | null>(null);
+  const [step, setStep] = useState<StepId>("brief");
 
   const imageRef = useRef<string | null>(null);
   const [sizes, setSizes] = useState<{ orig: number; sent: number } | null>(null);
@@ -277,6 +288,13 @@ export default function Report() {
     }
   }
 
+  // Arriving from the /where question page with an answer already chosen.
+  useEffect(() => {
+    const s = new URLSearchParams(window.location.search).get("scene");
+    if (s === "yes" || s === "no") pickScene(s);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const photoDist = photoGps && live ? Math.round(distanceM(photoGps, live)) : null;
   const photoFresh = !!photoTime && !photoOld;
   const source = moved ? (usedPhoto ? "photo" : "manual") : "gps";
@@ -329,6 +347,7 @@ export default function Report() {
       const ai = await res.json();
       setAiResult(ai);
       setChosenCategory(normalizeCategory(ai.category));
+      setStep("category");
     } catch (e: any) {
       setError(e.message ?? "Something went wrong");
     }
@@ -455,29 +474,162 @@ export default function Report() {
       </header>
 
       <main className="max-w-xl mx-auto p-4 space-y-4">
-        <div className="pt-2">
-          <h1 className="text-3xl font-extrabold">Report a problem</h1>
-          <p className="text-gray-600">
-            Pothole, blocked drain, power or water fault. Take a photo and send it to your
-            council.
-          </p>
-        </div>
+        {sent && (
+          <div className="bg-zgreen/10 border border-zgreen rounded-2xl p-4">
+            <p className="font-bold text-zgreen text-lg">✅ Report sent to the council</p>
+            <p className="text-sm text-gray-700">
+              Thank you for helping improve your community. Your report has been analysed
+              and added to the council&apos;s priority list.
+            </p>
+            {sizes && sizes.orig > 0 && (
+              <p className="text-xs text-gray-600 mt-1">
+                📉 Data saver: {(sizes.orig / 1048576).toFixed(1)} MB on your phone →{" "}
+                {(sizes.sent / 1024).toFixed(0)} KB sent (
+                {Math.max(0, Math.round(100 - (sizes.sent / sizes.orig) * 100))}% less data
+                used).
+              </p>
+            )}
+            {alertMsg && <p className="text-sm font-semibold text-zdeep mt-1">{alertMsg}</p>}
+          </div>
+        )}
+        {!sent && (
+          <>
+            {(step === "brief" ||
+              step === "photo" ||
+              step === "details" ||
+              step === "pin" ||
+              step === "check" ||
+              step === "category") && (
+              <div className="fixed inset-0 -z-10">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={
+                    step === "brief"
+                      ? "/img/location-sharing.png"
+                      : step === "photo"
+                        ? "/img/camera.png"
+                        : step === "details"
+                          ? "/img/details.png"
+                          : step === "pin"
+                            ? "/img/pin-location.png"
+                            : step === "check"
+                              ? "/img/ai-check.png"
+                              : "/img/confirm-send.png"
+                  }
+                  alt=""
+                  className="h-full w-full object-cover"
+                />
+                <div className="absolute inset-0 bg-white/70" />
+              </div>
+            )}
+            <div className="pt-2 space-y-2">
+              <h1 className="text-2xl font-extrabold">Report a problem</h1>
+              <div className="flex gap-1.5">
+                {STEPS.map((s, i) => (
+                  <div
+                    key={s.id}
+                    className={`h-1.5 flex-1 rounded-full ${
+                      STEPS.findIndex((x) => x.id === step) >= i ? "bg-zgreen" : "bg-gray-200"
+                    }`}
+                  />
+                ))}
+              </div>
+              <p className="text-xs font-semibold text-gray-500">
+                Step {STEPS.findIndex((x) => x.id === step) + 1} of {STEPS.length} ·{" "}
+                {STEPS.find((x) => x.id === step)?.label}
+              </p>
+            </div>
 
-        <div className="rounded-2xl border border-zorange/50 bg-zorange/10 p-4 text-sm space-y-2">
-          <p className="font-bold">Before you report</p>
-          <p>
-            📍 <b>Turn ON your phone&apos;s location (GPS)</b> before taking the picture, and
-            switch on <b>Location tags</b> in your camera settings so the photo carries its
-            location.
-          </p>
-          <p>📸 Take the photo <b>at the problem</b>, so the location is fresh and accurate.</p>
-          <p>
-            💬 <b>Photo forwarded on WhatsApp, or a screenshot?</b> These carry no location.
-            Kindly <b>share the location manually</b> by placing the pin on the map.
-          </p>
-        </div>
+            {step === "brief" && (
+              <div className="flex min-h-[75vh] items-center justify-center">
+                {scene === null ? (
+                  <div className="w-full max-w-lg rounded-2xl border-4 border-zgreen bg-white/95 p-5 space-y-4 shadow-2xl">
+                  <div className="space-y-1 text-center">
+                    <p className="text-4xl">🤔</p>
+                    <h2 className="text-xl font-extrabold">Where are you right now?</h2>
+                    <p className="text-xs text-gray-600">
+                      This picks the most honest location for your report — and boosts its
+                      confidence score.
+                    </p>
+                  </div>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <button
+                      type="button"
+                      onClick={() => pickScene("yes")}
+                      className="rounded-2xl border-2 border-zgreen/50 bg-zgreen/5 hover:bg-zgreen/15 p-4 text-left space-y-1"
+                    >
+                      <p className="text-3xl">🧍</p>
+                      <p className="font-extrabold text-zgreen">I&apos;m at the problem now</p>
+                      <p className="text-xs text-gray-600">
+                        We&apos;ll use your live GPS — switch your phone&apos;s location ON.
+                      </p>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => pickScene("no")}
+                      className="rounded-2xl border-2 border-zorange/50 bg-zorange/5 hover:bg-zorange/15 p-4 text-left space-y-1"
+                    >
+                      <p className="text-3xl">🛋️</p>
+                      <p className="font-extrabold text-zorange">I&apos;m somewhere else</p>
+                      <p className="text-xs text-gray-600">
+                        We&apos;ll use the location saved in your photo — no tags? You&apos;ll
+                        place the pin.
+                      </p>
+                    </button>
+                  </div>
+                  <button
+                    onClick={() => setStep("photo")}
+                    disabled={!scene}
+                    className="w-full rounded-xl bg-zgreen p-3 font-bold text-white hover:brightness-110 disabled:opacity-40"
+                  >
+                    Next →
+                  </button>
+                  </div>
+                ) : (
+                  <div
+                    className={`w-full max-w-lg rounded-2xl border-4 bg-white/95 p-5 space-y-3 shadow-2xl ${
+                      scene === "yes" ? "border-zgreen" : "border-zred"
+                    }`}
+                  >
+                    {scene === "yes" ? (
+                      <div className="space-y-1 text-center">
+                        <p className="text-3xl">🚨</p>
+                        <h2 className="text-lg font-extrabold text-zgreen">
+                          You&apos;re at the scene — report the incident now
+                        </h2>
+                        <p className="text-xs text-gray-700">
+                          First, <b>turn your phone&apos;s location ON</b> so we can lock the
+                          pin. Then take or choose a photo of the problem — your live GPS pins
+                          the spot automatically while you stay put.
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="space-y-1 text-center">
+                        <p className="text-3xl">📸</p>
+                        <h2 className="text-lg font-extrabold text-zred">
+                          Reporting from somewhere else?
+                        </h2>
+                        <p className="text-xs text-gray-700">
+                          Make sure your photo was taken with <b>Location tags ON</b> — we read
+                          the pin straight from it. No tags in the photo? You&apos;ll place the
+                          pin yourself on the map in a next step.
+                        </p>
+                      </div>
+                    )}
+                    <button
+                      onClick={() => setStep("photo")}
+                      className="w-full rounded-xl bg-zgreen p-3 font-bold text-white hover:brightness-110"
+                    >
+                      Next →
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
 
-        <div className="bg-white rounded-2xl shadow p-4 space-y-4 border border-gray-100">
+            {step === "photo" && (
+              <div className="flex min-h-[75vh] items-center justify-center">
+              <div className="w-full max-w-lg rounded-2xl border-4 border-zgreen bg-white/95 p-5 space-y-4 shadow-2xl">
           <label
             htmlFor="photo"
             className="block cursor-pointer rounded-xl border-2 border-dashed border-zgreen/50 bg-zgreen/5 p-6 text-center hover:bg-zgreen/10"
@@ -555,6 +707,28 @@ export default function Report() {
             className="w-full border border-gray-300 rounded-xl p-3 focus:outline-none focus:ring-2 focus:ring-zgreen"
           />
 
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => setStep("brief")}
+                    className="flex-1 rounded-xl border-2 border-gray-300 p-3 font-bold text-gray-600 hover:bg-gray-100"
+                  >
+                    ← Back
+                  </button>
+                  <button
+                    onClick={() => setStep("details")}
+                    disabled={!file}
+                    className="flex-1 rounded-xl bg-zgreen p-3 font-bold text-white hover:brightness-110 disabled:opacity-40"
+                  >
+                    Next →
+                  </button>
+                </div>
+              </div>
+              </div>
+            )}
+
+            {step === "details" && (
+              <div className="flex min-h-[75vh] items-center justify-center">
+              <div className="w-full max-w-lg rounded-2xl border-4 border-zgreen bg-white/95 p-5 space-y-4 shadow-2xl">
           <div className="space-y-3">
             <div>
               <label htmlFor="phone" className="block text-sm font-semibold">
@@ -617,71 +791,37 @@ export default function Report() {
             </div>
           </div>
 
-          <div className="space-y-2">
-            <div className="flex items-center justify-between text-sm">
-              <p className="font-semibold">📍 Problem location</p>
-              <p className={`font-semibold ${quality.color}`}>{quality.text}</p>
-            </div>
-
-            {scene === null ? (
-              <div className="rounded-2xl bg-white border-2 border-zgreen/30 shadow p-5 space-y-4">
-                <div className="text-center space-y-1">
-                  <p className="text-4xl">🤔</p>
-                  <h2 className="text-lg font-extrabold">Where are you right now?</h2>
-                  <p className="text-xs text-gray-600">
-                    This picks the most honest location for your report — and boosts its
-                    confidence score.
-                  </p>
-                </div>
-                <div className="grid sm:grid-cols-2 gap-3">
+                <div className="flex gap-3">
                   <button
-                    type="button"
-                    onClick={() => pickScene("yes")}
-                    className="rounded-2xl border-2 border-zgreen/50 bg-zgreen/5 hover:bg-zgreen/15 hover:-translate-y-0.5 transition p-4 text-left space-y-1"
+                    onClick={() => setStep("photo")}
+                    className="flex-1 rounded-xl border-2 border-gray-300 p-3 font-bold text-gray-600 hover:bg-gray-100"
                   >
-                    <p className="text-3xl">🧍</p>
-                    <p className="font-extrabold text-zgreen">I&apos;m at the problem now</p>
-                    <p className="text-xs text-gray-600">
-                      We&apos;ll use your live GPS — switch your phone&apos;s location ON.
-                    </p>
+                    ← Back
                   </button>
                   <button
-                    type="button"
-                    onClick={() => pickScene("no")}
-                    className="rounded-2xl border-2 border-zorange/50 bg-zorange/5 hover:bg-zorange/15 hover:-translate-y-0.5 transition p-4 text-left space-y-1"
+                    onClick={() => setStep("pin")}
+                    disabled={!phoneOk || !province || !district}
+                    className="flex-1 rounded-xl bg-zgreen p-3 font-bold text-white hover:brightness-110 disabled:opacity-40"
                   >
-                    <p className="text-3xl">🛋️</p>
-                    <p className="font-extrabold text-zorange">I&apos;m somewhere else</p>
-                    <p className="text-xs text-gray-600">
-                      We&apos;ll use the location saved in your photo — no tags? You&apos;ll
-                      place the pin.
-                    </p>
+                    Next →
                   </button>
                 </div>
               </div>
-            ) : (
-              <>
-                {scene === "yes" ? (
-                  <div className="rounded-xl border border-zgreen/40 bg-zgreen/10 p-3 text-sm space-y-1">
-                    <p className="font-bold text-zgreen">🛰️ You&apos;re at the scene — perfect!</p>
-                    <p className="text-gray-700">
-                      Turn your phone&apos;s location ON and stay put while we lock the pin.
-                    </p>
-                  </div>
-                ) : (
-                  <div className="rounded-xl border border-zorange/40 bg-zorange/10 p-3 text-sm space-y-1">
-                    <p className="font-bold text-zorange">📸 Not at the scene — no problem.</p>
-                    <p className="text-gray-700">
-                      Make sure your photo was taken with <b>Location tags ON</b>. If it carries
-                      no location, just tap the map to place the pin yourself.
-                    </p>
-                  </div>
-                )}
+              </div>
+            )}
+
+            {step === "pin" && (
+              <div className="flex min-h-[75vh] items-center justify-center">
+              <div className="w-full max-w-lg rounded-2xl border-4 border-zgreen bg-white/95 p-5 space-y-3 shadow-2xl">
+                <div className="flex items-center justify-between text-sm">
+                  <p className="font-semibold">📍 Problem location</p>
+                  <p className={`font-semibold ${quality.color}`}>{quality.text}</p>
+                </div>
 
                 {gpsErr && <p className="text-zred text-sm">{gpsErr}</p>}
 
                 {pos ? (
-                  <div className="rounded-xl overflow-hidden border border-gray-200">
+                  <div className="overflow-hidden rounded-xl border border-gray-200">
                     <LocationPicker
                       lat={pos.lat}
                       lng={pos.lng}
@@ -690,7 +830,7 @@ export default function Report() {
                     />
                   </div>
                 ) : (
-                  <div className="h-24 rounded-xl bg-gray-100 flex items-center justify-center text-sm text-gray-500">
+                  <div className="flex h-24 items-center justify-center rounded-xl bg-gray-100 text-sm text-gray-500">
                     Finding your GPS... make sure location is ON.
                   </div>
                 )}
@@ -723,30 +863,77 @@ export default function Report() {
                     Switch to {scene === "yes" ? '"I\'m somewhere else"' : '"I\'m at the scene"'}
                   </button>
                 </div>
-              </>
+
+                {conf && (
+                  <div className="rounded-xl border border-gray-200 p-3">
+                    <div className="flex justify-between text-sm font-semibold">
+                      <span>🛡️ Location confidence</span>
+                      <span style={{ color: confColor }}>
+                        {conf.level} · {conf.score}/100
+                      </span>
+                    </div>
+                    <div className="h-2 bg-gray-200 rounded-full mt-2 overflow-hidden">
+                      <div
+                        className="h-2 rounded-full"
+                        style={{ width: `${conf.score}%`, background: confColor }}
+                      />
+                    </div>
+                    <p className="text-xs text-gray-500 mt-2">{conf.reasons.join(" · ")}</p>
+                  </div>
+                )}
+
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => setStep("details")}
+                    className="flex-1 rounded-xl border-2 border-gray-300 p-3 font-bold text-gray-600 hover:bg-gray-100"
+                  >
+                    ← Back
+                  </button>
+                  <button
+                    onClick={() => setStep("check")}
+                    disabled={!locationOk}
+                    className="flex-1 rounded-xl bg-zgreen p-3 font-bold text-white hover:brightness-110 disabled:opacity-40"
+                  >
+                    Next →
+                  </button>
+                </div>
+              </div>
+              </div>
             )}
-          </div>
 
-          {conf && (
-            <div className="rounded-xl border border-gray-200 p-3">
-              <div className="flex justify-between text-sm font-semibold">
-                <span>🛡️ Location confidence</span>
-                <span style={{ color: confColor }}>
-                  {conf.level} · {conf.score}/100
-                </span>
+            {step === "check" && (
+              <div className="flex min-h-[75vh] items-center justify-center">
+              <div className="w-full max-w-lg rounded-2xl border-4 border-zgreen bg-white/95 p-5 space-y-3 shadow-2xl">
+                <div className="space-y-1 text-center">
+                  <p className="text-3xl">🤖</p>
+                  <h2 className="text-lg font-extrabold">Let the AI check your photo</h2>
+                  <p className="text-xs text-gray-600">
+                    We&apos;ll identify the issue and route it to the right department — you
+                    confirm before anything is sent.
+                  </p>
+                </div>
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => setStep("pin")}
+                    className="flex-1 rounded-xl border-2 border-gray-300 p-3 font-bold text-gray-600 hover:bg-gray-100"
+                  >
+                    ← Back
+                  </button>
+                  <button
+                    onClick={submit}
+                    disabled={!file || !locationOk || !phoneOk || !province || !district || busy}
+                    className="flex-1 bg-zorange hover:brightness-110 text-white font-bold rounded-xl p-3 disabled:opacity-40"
+                  >
+                    {busy ? "Analysing your photo..." : "Analyse photo →"}
+                  </button>
+                </div>
               </div>
-              <div className="h-2 bg-gray-200 rounded-full mt-2 overflow-hidden">
-                <div
-                  className="h-2 rounded-full"
-                  style={{ width: `${conf.score}%`, background: confColor }}
-                />
               </div>
-              <p className="text-xs text-gray-500 mt-2">{conf.reasons.join(" · ")}</p>
-            </div>
-          )}
+            )}
 
-          {aiResult ? (
-            <div className="rounded-2xl border-2 border-zorange/50 bg-zorange/5 p-4 space-y-3">
+            {step === "category" && aiResult && (
+              <div className="flex min-h-[75vh] items-center justify-center">
+              <div className="w-full max-w-xl rounded-2xl border-4 border-zgreen bg-white/95 p-5 space-y-3 shadow-2xl">
               <div className="text-center space-y-1">
                 <p className="text-3xl">🤖</p>
                 <h2 className="text-lg font-extrabold">
@@ -797,43 +984,28 @@ export default function Report() {
                   : `Confirm & send to ${deptInfo(deptOf(chosenCategory ?? "")).name}`}
               </button>
               <button
-                onClick={() => setAiResult(null)}
+                onClick={() => {
+                  setAiResult(null);
+                  setStep("photo");
+                }}
                 type="button"
                 className="w-full text-zorange underline text-sm font-semibold"
               >
                 Change photo / start over
               </button>
-            </div>
-          ) : (
-            <button
-              onClick={submit}
-              disabled={!file || !locationOk || !phoneOk || !province || !district || busy}
-              className="w-full bg-zorange hover:brightness-110 text-white font-bold text-lg rounded-xl p-4 disabled:opacity-40"
-            >
-              {busy ? "Analysing your photo..." : "Analyse photo & continue"}
-            </button>
-          )}
-
-          {error && <p className="text-zred text-sm">{error}</p>}
-        </div>
-
-        {sent && (
-          <div className="bg-zgreen/10 border border-zgreen rounded-2xl p-4">
-            <p className="font-bold text-zgreen text-lg">✅ Report sent to the council</p>
-            <p className="text-sm text-gray-700">
-              Thank you for helping improve your community. Your report has been analysed
-              and added to the council&apos;s priority list.
-            </p>
-            {sizes && sizes.orig > 0 && (
-              <p className="text-xs text-gray-600 mt-1">
-                📉 Data saver: {(sizes.orig / 1048576).toFixed(1)} MB on your phone →{" "}
-                {(sizes.sent / 1024).toFixed(0)} KB sent (
-                {Math.max(0, Math.round(100 - (sizes.sent / sizes.orig) * 100))}% less data
-                used).
-              </p>
+              <button
+                onClick={() => setStep("pin")}
+                type="button"
+                className="w-full text-gray-500 underline text-sm font-semibold"
+              >
+                ← Back to the map
+              </button>
+              </div>
+              </div>
             )}
-            {alertMsg && <p className="text-sm font-semibold text-zdeep mt-1">{alertMsg}</p>}
-          </div>
+
+            {error && <p className="text-zred text-sm">{error}</p>}
+          </>
         )}
       </main>
     </div>
