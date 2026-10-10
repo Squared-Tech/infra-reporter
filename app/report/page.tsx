@@ -6,6 +6,7 @@ import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/useAuth";
 import { Stripe, Wordmark } from "@/components/Brand";
 import { PROVINCES, PROVINCE_NAMES } from "@/lib/zambia";
+import { regionCenter } from "@/lib/regionGeo";
 import {
   CATEGORIES,
   CATEGORY_IDS,
@@ -147,6 +148,9 @@ export default function Report() {
   const movedRef = useRef(false);
   const bestRef = useRef(Infinity);
   const sceneRef = useRef<"yes" | "no" | null>(null);
+  const posRef = useRef<LatLng | null>(null);
+  const seedRef = useRef<LatLng | null>(null);
+  const [regionName, setRegionName] = useState<string | null>(null);
 
   const preview = useMemo(() => (file ? URL.createObjectURL(file) : null), [file]);
 
@@ -198,6 +202,32 @@ export default function Report() {
     }, 10000);
     return () => clearTimeout(t);
   }, [ready, pos]);
+
+  useEffect(() => {
+    posRef.current = pos;
+  }, [pos]);
+
+  // Centre the manual pin on the province/district the reporter selected,
+  // instead of the country-wide fallback point, whenever there is no better signal.
+  useEffect(() => {
+    if (!province || !district) return;
+    let cancelled = false;
+    (async () => {
+      const c = await regionCenter(district, province);
+      if (cancelled || !c || movedRef.current) return;
+      const p = posRef.current;
+      const isFallback = !p || (p.lat === FALLBACK.lat && p.lng === FALLBACK.lng);
+      const s = seedRef.current;
+      const isOldSeed = !!s && !!p && p.lat === s.lat && p.lng === s.lng;
+      if (!isFallback && !isOldSeed) return;
+      seedRef.current = c;
+      setPos({ lat: c.lat, lng: c.lng });
+      setRegionName(`${district}, ${province}`);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [province, district, scene]);
 
   async function onPick(f: File | null) {
     setFile(f);
@@ -324,6 +354,8 @@ export default function Report() {
     : acc <= MAX_OK_ACCURACY
     ? { text: `Good (±${acc} m)`, color: "text-zgreen" }
     : { text: `Weak (±${acc} m)`, color: "text-zred" };
+
+  const regionSeeded = !!regionName && !moved && acc === null && !usedPhoto;
 
   async function submit() {
     if (!file || !pos || !locationOk || !conf) return;
@@ -838,6 +870,7 @@ export default function Report() {
                       lng={pos.lng}
                       accuracy={moved ? null : acc}
                       onChange={moveTo}
+                      minZoom={regionSeeded ? 13 : 16}
                     />
                   </div>
                 ) : (
@@ -849,6 +882,12 @@ export default function Report() {
                 <p className="text-xs text-gray-500">
                   Tap the map or drag the red pin to place it exactly on the problem.
                 </p>
+                {regionSeeded && (
+                  <p className="text-xs font-semibold text-zdeep">
+                    🎯 Map centred on {regionName} — tap your exact spot so the council can
+                    reach it fast.
+                  </p>
+                )}
                 {!locationOk && pos && (
                   <p className="text-xs text-zred">
                     {forwarded || scene === "no"

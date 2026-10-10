@@ -9,6 +9,7 @@ type Props = {
   lng: number;
   accuracy: number | null;
   onChange: (lat: number, lng: number) => void;
+  minZoom?: number;
 };
 
 const pinIcon = L.divIcon({
@@ -27,15 +28,21 @@ function ClickCatcher({ onPick }: { onPick: (lat: number, lng: number) => void }
   return null;
 }
 
-function FollowPin({ lat, lng }: { lat: number; lng: number }) {
+function FollowPin({ lat, lng, minZoom }: { lat: number; lng: number; minZoom: number }) {
   const map = useMap();
   useEffect(() => {
-    map.setView([lat, lng], Math.max(map.getZoom(), 16), { animate: true });
-  }, [lat, lng, map]);
+    map.setView([lat, lng], Math.max(map.getZoom(), minZoom), { animate: true });
+  }, [lat, lng, map, minZoom]);
   return null;
 }
 
-export default function LocationPicker({ lat, lng, accuracy, onChange }: Props) {
+export default function LocationPicker({
+  lat,
+  lng,
+  accuracy,
+  onChange,
+  minZoom = 16,
+}: Props) {
   const [ready, setReady] = useState(false);
   useEffect(() => setReady(true), []);
 
@@ -44,7 +51,7 @@ export default function LocationPicker({ lat, lng, accuracy, onChange }: Props) 
   return (
     <MapContainer
       center={[lat, lng]}
-      zoom={16}
+      zoom={minZoom}
       style={{ height: 300, width: "100%" }}
       ref={(m) => {
         if (m) setTimeout(() => m.invalidateSize(), 300);
@@ -73,7 +80,7 @@ export default function LocationPicker({ lat, lng, accuracy, onChange }: Props) 
         }}
       />
       <ClickCatcher onPick={onChange} />
-      <FollowPin lat={lat} lng={lng} />
+      <FollowPin lat={lat} lng={lng} minZoom={minZoom} />
     </MapContainer>
   );
 }
