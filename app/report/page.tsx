@@ -6,7 +6,8 @@ import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/useAuth";
 import { Stripe, Wordmark } from "@/components/Brand";
 import { PROVINCES, PROVINCE_NAMES } from "@/lib/zambia";
-import { regionCenter } from "@/lib/regionGeo";
+import { regionCenter, compoundCenter } from "@/lib/regionGeo";
+import { COMPOUNDS } from "@/lib/compounds";
 import {
   CATEGORIES,
   CATEGORY_IDS,
@@ -123,6 +124,7 @@ export default function Report() {
   const [phone, setPhone] = useState("");
   const [province, setProvince] = useState("");
   const [district, setDistrict] = useState("");
+  const [compound, setCompound] = useState("");
   const [pos, setPos] = useState<LatLng | null>(null);
   const [acc, setAcc] = useState<number | null>(null);
   const [live, setLive] = useState<(LatLng & { acc: number }) | null>(null);
@@ -207,13 +209,15 @@ export default function Report() {
     posRef.current = pos;
   }, [pos]);
 
-  // Centre the manual pin on the province/district the reporter selected,
+  // Centre the manual pin on the compound/district the reporter selected,
   // instead of the country-wide fallback point, whenever there is no better signal.
   useEffect(() => {
     if (!province || !district) return;
     let cancelled = false;
     (async () => {
-      const c = await regionCenter(district, province);
+      const c = compound.trim()
+        ? await compoundCenter(compound.trim(), district, province)
+        : await regionCenter(district, province);
       if (cancelled || !c || movedRef.current) return;
       const p = posRef.current;
       const isFallback = !p || (p.lat === FALLBACK.lat && p.lng === FALLBACK.lng);
@@ -222,12 +226,14 @@ export default function Report() {
       if (!isFallback && !isOldSeed) return;
       seedRef.current = c;
       setPos({ lat: c.lat, lng: c.lng });
-      setRegionName(`${district}, ${province}`);
+      setRegionName(
+        compound.trim() ? `${compound.trim()}, ${district}` : `${district}, ${province}`
+      );
     })();
     return () => {
       cancelled = true;
     };
-  }, [province, district, scene]);
+  }, [province, district, compound, scene]);
 
   async function onPick(f: File | null) {
     setFile(f);
@@ -333,6 +339,8 @@ export default function Report() {
     !!pos && (forwarded ? moved : moved || (acc !== null && acc <= MAX_OK_ACCURACY));
 
   const phoneOk = phone.replace(/\D/g, "").length >= 9;
+  const compoundOptions = COMPOUNDS[district] ?? [];
+  const compoundOk = compound.trim().length > 0;
 
   const conf = pos
     ? scoreLocation({ moved, usedPhoto, acc, photoDist, photoFresh, forwarded })
@@ -409,7 +417,7 @@ export default function Report() {
       const reporterName =
         (sess?.session?.user?.user_metadata?.full_name as string) ?? email;
 
-      const ins = await supabase.from("reports").insert({
+      const basePayload = {
         photo_url: data.publicUrl,
         lat: pos.lat,
         lng: pos.lng,
@@ -434,7 +442,16 @@ export default function Report() {
         reason: aiResult.reason,
         suggested_action: aiResult.suggested_action,
         note,
-      }).select("id").maybeSingle();
+      };
+      let ins = await supabase
+        .from("reports")
+        .insert({ ...basePayload, compound: compound.trim() })
+        .select("id")
+        .maybeSingle();
+      // If the compound column hasn't been added in Supabase yet, save without it.
+      if (ins.error && /compound/i.test(ins.error.message)) {
+        ins = await supabase.from("reports").insert(basePayload).select("id").maybeSingle();
+      }
       if (ins.error) throw ins.error;
       const newId = (ins as { data: { id?: string } | null }).data?.id ?? null;
 
@@ -468,6 +485,7 @@ export default function Report() {
       setNote("");
       setProvince("");
       setDistrict("");
+      setCompound("");
       setAiResult(null);
       setChosenCategory(null);
       imageRef.current = null;
@@ -801,6 +819,7 @@ export default function Report() {
                   onChange={(e) => {
                     setProvince(e.target.value);
                     setDistrict("");
+                    setCompound("");
                   }}
                   className="mt-1 w-full border border-gray-300 rounded-xl p-3 bg-white focus:outline-none focus:ring-2 focus:ring-zgreen"
                 >
@@ -819,7 +838,10 @@ export default function Report() {
                 <select
                   id="district"
                   value={district}
-                  onChange={(e) => setDistrict(e.target.value)}
+                  onChange={(e) => {
+                    setDistrict(e.target.value);
+                    setCompound("");
+                  }}
                   disabled={!province}
                   className="mt-1 w-full border border-gray-300 rounded-xl p-3 bg-white focus:outline-none focus:ring-2 focus:ring-zgreen disabled:opacity-50"
                 >
@@ -832,6 +854,43 @@ export default function Report() {
                 </select>
               </div>
             </div>
+            <div>
+              <label htmlFor="compound" className="block text-sm font-semibold">
+                🏘️ Compound / Township <span className="text-zred">*</span>
+              </label>
+              {compoundOptions.length > 0 ? (
+                <select
+                  id="compound"
+                  value={compound}
+                  onChange={(e) => setCompound(e.target.value)}
+                  disabled={!district}
+                  className="mt-1 w-full border border-gray-300 rounded-xl p-3 bg-white focus:outline-none focus:ring-2 focus:ring-zgreen disabled:opacity-50"
+                >
+                  <option value="">
+                    {district ? "Select compound" : "Pick district first"}
+                  </option>
+                  {compoundOptions.map((w) => (
+                    <option key={w} value={w}>
+                      {w}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  id="compound"
+                  type="text"
+                  placeholder={district ? "Type your compound" : "Pick district first"}
+                  value={compound}
+                  onChange={(e) => setCompound(e.target.value)}
+                  disabled={!district}
+                  className="mt-1 w-full border border-gray-300 rounded-xl p-3 focus:outline-none focus:ring-2 focus:ring-zgreen disabled:opacity-50"
+                />
+              )}
+              <p className="text-xs text-gray-500">
+                The compound or township tells the council which local area should respond
+                first.
+              </p>
+            </div>
           </div>
 
                 <div className="flex gap-3">
@@ -843,7 +902,7 @@ export default function Report() {
                   </button>
                   <button
                     onClick={() => setStep("pin")}
-                    disabled={!phoneOk || !province || !district}
+                    disabled={!phoneOk || !province || !district || !compoundOk}
                     className="flex-1 rounded-xl bg-zgreen p-3 font-bold text-white hover:brightness-110 disabled:opacity-40"
                   >
                     Next →
@@ -870,7 +929,7 @@ export default function Report() {
                       lng={pos.lng}
                       accuracy={moved ? null : acc}
                       onChange={moveTo}
-                      minZoom={regionSeeded ? 13 : 16}
+                      minZoom={regionSeeded ? (compound.trim() ? 15 : 13) : 16}
                     />
                   </div>
                 ) : (

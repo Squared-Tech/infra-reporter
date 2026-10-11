@@ -480,6 +480,7 @@ export default function Dashboard() {
                         <p className="text-gray-800">{r.suggested_action}</p>
                         <p className="text-xs text-gray-500">
                           📍 {r.address ?? "Address unavailable"}
+                          {r.compound && ` · 🏘️ ${r.compound}`}
                           {r.accuracy_m != null && ` · ±${r.accuracy_m} m`}
                           {r.location_source && ` · ${r.location_source}`}
                         </p>

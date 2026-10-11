@@ -43,3 +43,40 @@ export async function regionCenter(
   if (point) cache.set(key, point);
   return point;
 }
+
+export async function compoundCenter(
+  compound: string,
+  district: string,
+  province: string
+): Promise<RegionPoint | null> {
+  const key = `${province}/${district}/${compound}`;
+  const hit = cache.get(key);
+  if (hit) return hit;
+
+  let point: RegionPoint | null = null;
+  try {
+    const q = encodeURIComponent(`${compound}, ${district}, ${province}, Zambia`);
+    const res = await fetch(
+      `https://nominatim.openstreetmap.org/search?format=jsonv2&limit=5&countrycodes=zm&q=${q}`
+    );
+    if (res.ok) {
+      const j = (await res.json()) as {
+        lat?: string;
+        lon?: string;
+        category?: string;
+        addresstype?: string;
+      }[];
+      // Roads named after a township can outrank the township itself — prefer places.
+      const best =
+        j.find((r) => r.category === "place" || r.category === "boundary") ?? j[0];
+      const lat = best?.lat ? parseFloat(best.lat) : NaN;
+      const lng = best?.lon ? parseFloat(best.lon) : NaN;
+      if (Number.isFinite(lat) && Number.isFinite(lng)) point = { lat, lng };
+    }
+  } catch {
+    // offline / blocked: fall through to the district centre
+  }
+  if (!point) point = await regionCenter(district, province);
+  if (point) cache.set(key, point);
+  return point;
+}
