@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/useAuth";
 import { Stripe, Wordmark } from "@/components/Brand";
+import InstallPrompt from "@/components/InstallPrompt";
 import { DEPARTMENTS, DEPARTMENT_IDS } from "@/lib/departments";
 
 const SERVICES = [
@@ -161,6 +162,10 @@ export default function Home() {
           </div>
         </div>
       </section>
+
+      <div className="mx-auto max-w-6xl px-4 pt-6">
+        <InstallPrompt />
+      </div>
 
       {/* Stats strip */}
       <section className="bg-zgreen">
