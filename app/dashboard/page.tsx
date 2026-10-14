@@ -52,6 +52,41 @@ export default function Dashboard() {
   const [alarm, setAlarm] = useState<any | null>(null);
   const [live, setLive] = useState(false);
   const [copied, setCopied] = useState("");
+  const [focus, setFocus] = useState("");
+
+  // Jump from the emergency alarm straight to the case that caused it.
+  function viewCase(r: any) {
+    setAlarm(null);
+    setTab(statusOf(r));
+    setOnlyHigh(false);
+    setProv("");
+    setDist("");
+    setDept("");
+    setFocus(r.id);
+  }
+
+  // The card can be a frame behind the tab/filter state change, so retry the
+  // scroll until it is in the DOM (bounded to ~2s).
+  useEffect(() => {
+    if (!focus) return;
+    let frame = 0;
+    let tries = 0;
+    const step = () => {
+      const el = document.getElementById(`case-${focus}`);
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+        return;
+      }
+      if (++tries > 120) return;
+      frame = requestAnimationFrame(step);
+    };
+    frame = requestAnimationFrame(step);
+    const t = setTimeout(() => setFocus(""), 5000);
+    return () => {
+      cancelAnimationFrame(frame);
+      clearTimeout(t);
+    };
+  }, [focus]);
 
   async function load() {
     const { data } = await supabase
@@ -442,7 +477,12 @@ export default function Dashboard() {
                 {rs.map((r) => (
                   <div
                     key={r.id}
-                    className="bg-white rounded-2xl shadow p-4 border border-gray-100 hover:shadow-md transition space-y-3"
+                    id={`case-${r.id}`}
+                    className={`rounded-2xl shadow p-4 border transition space-y-3 ${
+                      focus === r.id
+                        ? "ring-4 ring-zorange border-zorange"
+                        : "bg-white border-gray-100 hover:shadow-md"
+                    }`}
                   >
                     <div className="flex gap-4 flex-col md:flex-row">
                       <div className="md:w-56 shrink-0 space-y-2">
@@ -587,10 +627,10 @@ export default function Dashboard() {
                 🔊 Tap for sound
               </button>
               <button
-                onClick={() => setAlarm(null)}
+                onClick={() => viewCase(alarm)}
                 className="w-full bg-white text-zred font-black rounded-xl p-3 hover:brightness-95"
               >
-                Acknowledge & view queue
+                Acknowledge & view this case
               </button>
             </div>
           </div>
