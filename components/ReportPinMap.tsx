@@ -1,7 +1,8 @@
 "use client";
 import { useEffect, useState } from "react";
-import { CircleMarker, MapContainer, Popup, TileLayer } from "react-leaflet";
+import { CircleMarker, MapContainer, Popup } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
+import MapTiles from "./MapTiles";
 
 type Props = {
   lat: number;
@@ -26,10 +27,7 @@ export default function ReportPinMap({ lat, lng, color, label }: Props) {
         if (m) setTimeout(() => m.invalidateSize(), 200);
       }}
     >
-      <TileLayer
-        attribution="&copy; OpenStreetMap"
-        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-      />
+      <MapTiles />
       <CircleMarker
         center={[lat, lng]}
         radius={9}

@@ -1,7 +1,8 @@
 "use client";
 import { useEffect, useState } from "react";
-import { MapContainer, TileLayer, CircleMarker, Popup } from "react-leaflet";
+import { MapContainer, CircleMarker, Popup } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
+import MapTiles from "./MapTiles";
 
 const colors = ["", "#22c55e", "#84cc16", "#eab308", "#f97316", "#dc2626"];
 
@@ -25,10 +26,7 @@ export default function ReportMap({ reports }: { reports: any[] }) {
         if (m) setTimeout(() => m.invalidateSize(), 300);
       }}
     >
-      <TileLayer
-        attribution="&copy; OpenStreetMap"
-        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-      />
+      <MapTiles />
       {reports.map((r) => (
         <CircleMarker
           key={r.id}

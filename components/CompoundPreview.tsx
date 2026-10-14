@@ -1,8 +1,9 @@
 "use client";
 import { useEffect, useState } from "react";
-import { CircleMarker, MapContainer, Marker, Popup, TileLayer, useMap } from "react-leaflet";
+import { CircleMarker, MapContainer, Marker, Popup, useMap } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
+import MapTiles from "./MapTiles";
 import type { Place } from "@/lib/places";
 
 const esc = (s: string) =>
@@ -47,10 +48,7 @@ export default function CompoundPreview({ lat, lng, places }: Props) {
         if (m) setTimeout(() => m.invalidateSize(), 200);
       }}
     >
-      <TileLayer
-        attribution="&copy; OpenStreetMap"
-        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-      />
+      <MapTiles />
       <CircleMarker
         center={[lat, lng]}
         radius={8}

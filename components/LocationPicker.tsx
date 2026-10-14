@@ -1,8 +1,9 @@
 "use client";
 import { useEffect, useState } from "react";
-import { Circle, MapContainer, Marker, TileLayer, useMap, useMapEvents } from "react-leaflet";
+import { Circle, MapContainer, Marker, useMap, useMapEvents } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
+import MapTiles from "./MapTiles";
 import type { Place } from "@/lib/places";
 import { placeIcon } from "./CompoundPreview";
 
@@ -61,10 +62,7 @@ export default function LocationPicker({
         if (m) setTimeout(() => m.invalidateSize(), 300);
       }}
     >
-      <TileLayer
-        attribution="&copy; OpenStreetMap"
-        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-      />
+      <MapTiles />
       {accuracy !== null && (
         <Circle
           center={[lat, lng]}
