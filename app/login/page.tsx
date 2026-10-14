@@ -70,11 +70,15 @@ export default function Login() {
       return;
     }
 
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    const addr = email.trim().includes("@")
+      ? email.trim()
+      : `${email.trim().toLowerCase()}@fixzed.zm`;
+
+    const { data, error } = await supabase.auth.signInWithPassword({ email: addr, password });
     if (error || !data.user) {
       if (error?.message.toLowerCase().includes("not confirmed")) {
-        await resend(email);
-        setSentTo(email);
+        await resend(addr);
+        setSentTo(addr);
         setCode("");
         setBusy(false);
         return;
@@ -202,8 +206,8 @@ export default function Login() {
               />
             )}
             <input
-              placeholder="Email"
-              type="email"
+              placeholder={mode === "in" ? "Email or username (admin)" : "Email"}
+              type={mode === "in" ? "text" : "email"}
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               className={inputCls}

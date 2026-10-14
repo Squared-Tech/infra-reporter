@@ -51,7 +51,7 @@ export default function Where() {
             <p className="text-4xl">🤔</p>
             <h1 className="text-2xl font-extrabold">Where are you right now?</h1>
             <p className="text-xs text-gray-600">
-              This picks the most honest location for your report — and boosts its
+              This picks the most honest location for your report, and boosts its
               confidence score.
             </p>
           </div>
@@ -69,7 +69,7 @@ export default function Where() {
               <p className="text-3xl">🧍</p>
               <p className="font-extrabold text-zgreen">I&apos;m at the problem now</p>
               <p className="text-xs text-gray-600">
-                We&apos;ll use your live GPS — switch your phone&apos;s location ON.
+                We&apos;ll use your live GPS, so switch your phone&apos;s location ON.
               </p>
             </button>
             <button
@@ -84,7 +84,7 @@ export default function Where() {
               <p className="text-3xl">🛋️</p>
               <p className="font-extrabold text-zorange">I&apos;m somewhere else</p>
               <p className="text-xs text-gray-600">
-                We&apos;ll use the location saved in your photo — no tags? You&apos;ll
+                We&apos;ll use the location saved in your photo. No tags? You&apos;ll
                 place the pin.
               </p>
             </button>

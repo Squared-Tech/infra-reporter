@@ -8,6 +8,7 @@ import { Stripe, Wordmark } from "@/components/Brand";
 import { PROVINCES, PROVINCE_NAMES } from "@/lib/zambia";
 import { regionCenter, compoundCenter } from "@/lib/regionGeo";
 import { COMPOUNDS } from "@/lib/compounds";
+import { fetchPlaces, type Place } from "@/lib/places";
 import {
   CATEGORIES,
   CATEGORY_IDS,
@@ -18,6 +19,7 @@ import {
 } from "@/lib/departments";
 
 const LocationPicker = dynamic(() => import("@/components/LocationPicker"), { ssr: false });
+const CompoundPreview = dynamic(() => import("@/components/CompoundPreview"), { ssr: false });
 
 const MAX_OK_ACCURACY = 30; // metres
 const MATCH_DISTANCE = 50; // metres: photo vs GPS agreement
@@ -153,6 +155,10 @@ export default function Report() {
   const posRef = useRef<LatLng | null>(null);
   const seedRef = useRef<LatLng | null>(null);
   const [regionName, setRegionName] = useState<string | null>(null);
+  const [compoundMap, setCompoundMap] = useState<LatLng | null>(null);
+  const [places, setPlaces] = useState<Place[]>([]);
+  const [placesStatus, setPlacesStatus] = useState<"idle" | "loading" | "ok" | "error">("idle");
+  const [placesRetry, setPlacesRetry] = useState(0);
 
   const preview = useMemo(() => (file ? URL.createObjectURL(file) : null), [file]);
 
@@ -234,6 +240,43 @@ export default function Report() {
       cancelled = true;
     };
   }, [province, district, compound, scene]);
+
+  // When a compound is chosen, load its map centre and the named places around it
+  // (schools, clinics, shops...) so reporters can orient themselves by landmarks.
+  useEffect(() => {
+    const cname = compound.trim();
+    if (!cname || !district || !province) {
+      setCompoundMap(null);
+      setPlaces([]);
+      setPlacesStatus("idle");
+      return;
+    }
+    let cancelled = false;
+    setPlacesStatus("loading");
+    (async () => {
+      const c = await compoundCenter(cname, district, province);
+      if (cancelled) return;
+      if (!c) {
+        setCompoundMap(null);
+        setPlaces([]);
+        setPlacesStatus("error");
+        return;
+      }
+      setCompoundMap(c);
+      const items = await fetchPlaces(c.lat, c.lng);
+      if (cancelled) return;
+      if (items === null) {
+        setPlaces([]);
+        setPlacesStatus("error");
+      } else {
+        setPlaces(items);
+        setPlacesStatus("ok");
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [province, district, compound, placesRetry]);
 
   async function onPick(f: File | null) {
     setFile(f);
@@ -507,9 +550,14 @@ export default function Report() {
           </a>
           <div className="flex items-center gap-3 text-sm">
             <span className="hidden sm:inline opacity-80">{email}</span>
-            {role === "council" && (
+            {(role === "council" || role === "admin") && (
               <a href="/dashboard" className="underline font-semibold">
                 Dashboard
+              </a>
+            )}
+            {role === "admin" && (
+              <a href="/admin" className="font-semibold text-amber-300 underline">
+                👑 Admin
               </a>
             )}
             <button
@@ -598,7 +646,7 @@ export default function Report() {
                     <p className="text-4xl">🤔</p>
                     <h2 className="text-xl font-extrabold">Where are you right now?</h2>
                     <p className="text-xs text-gray-600">
-                      This picks the most honest location for your report — and boosts its
+                      This picks the most honest location for your report, and boosts its
                       confidence score.
                     </p>
                   </div>
@@ -611,7 +659,7 @@ export default function Report() {
                       <p className="text-3xl">🧍</p>
                       <p className="font-extrabold text-zgreen">I&apos;m at the problem now</p>
                       <p className="text-xs text-gray-600">
-                        We&apos;ll use your live GPS — switch your phone&apos;s location ON.
+                        We&apos;ll use your live GPS, so switch your phone&apos;s location ON.
                       </p>
                     </button>
                     <button
@@ -622,7 +670,7 @@ export default function Report() {
                       <p className="text-3xl">🛋️</p>
                       <p className="font-extrabold text-zorange">I&apos;m somewhere else</p>
                       <p className="text-xs text-gray-600">
-                        We&apos;ll use the location saved in your photo — no tags? You&apos;ll
+                        We&apos;ll use the location saved in your photo. No tags? You&apos;ll
                         place the pin.
                       </p>
                     </button>
@@ -645,11 +693,11 @@ export default function Report() {
                       <div className="space-y-1 text-center">
                         <p className="text-3xl">🚨</p>
                         <h2 className="text-lg font-extrabold text-zgreen">
-                          You&apos;re at the scene — report the incident now
+                          You&apos;re at the scene, so report the incident now
                         </h2>
                         <p className="text-xs text-gray-700">
                           First, <b>turn your phone&apos;s location ON</b> so we can lock the
-                          pin. Then take or choose a photo of the problem — your live GPS pins
+                          pin. Then take or choose a photo of the problem. Your live GPS pins
                           the spot automatically while you stay put.
                         </p>
                       </div>
@@ -660,7 +708,7 @@ export default function Report() {
                           Reporting from somewhere else?
                         </h2>
                         <p className="text-xs text-gray-700">
-                          Make sure your photo was taken with <b>Location tags ON</b> — we read
+                          Make sure your photo was taken with <b>Location tags ON</b>, so we read
                           the pin straight from it. No tags in the photo? You&apos;ll place the
                           pin yourself on the map in a next step.
                         </p>
@@ -714,7 +762,7 @@ export default function Report() {
             onChange={(e) => onPick(e.target.files?.[0] ?? null)}
           />
           <p className="text-xs text-gray-500">
-            📉 <b>Data saver is on.</b> Photos are compressed only for transmission — the
+            📉 <b>Data saver is on.</b> Photos are compressed only for transmission, and the
             council still receives a clear, full-colour picture, and the GPS location saved
             inside your photo is kept.
           </p>
@@ -733,20 +781,20 @@ export default function Report() {
             <div className="rounded-xl border border-gray-200 p-3 text-sm">
               {photoDist !== null && photoDist <= MATCH_DISTANCE ? (
                 <p className="text-zgreen font-semibold">
-                  ✅ Photo location matches your GPS ({photoDist} m apart) — strong evidence!
+                  ✅ Photo location matches your GPS ({photoDist} m apart), strong evidence!
                 </p>
               ) : (
                 <p className="text-gray-600">
                   {photoDist !== null
-                    ? `📸 This photo was taken ${photoDist} m from here — since you're at the scene, we'll use your live GPS.`
-                    : "📸 This photo also carries a location — great, it cross-checks your GPS!"}
+                    ? `📸 This photo was taken ${photoDist} m from here. Since you're at the scene, we'll use your live GPS.`
+                    : "📸 This photo also carries a location. Great, it cross-checks your GPS!"}
                 </p>
               )}
             </div>
           )}
           {file && photoGps && scene === "no" && (
             <div className="rounded-xl border border-zgreen/40 bg-zgreen/10 p-3 text-sm font-semibold text-zgreen">
-              📸 Using the location saved inside your photo — pin set on the map below.
+              📸 Using the location saved inside your photo. Pin set on the map below.
             </div>
           )}
           {file && photoChecked && !photoGps && !forwarded && (
@@ -804,7 +852,7 @@ export default function Report() {
                 className="mt-1 w-full border border-gray-300 rounded-xl p-3 focus:outline-none focus:ring-2 focus:ring-zgreen"
               />
               <p className="text-xs text-gray-500">
-                Only the council can see this — they&apos;ll call you if the location is
+                Only the council can see this. They&apos;ll call you if the location is
                 unclear.
               </p>
             </div>
@@ -891,6 +939,60 @@ export default function Report() {
                 first.
               </p>
             </div>
+
+            {compound.trim() && compoundMap && (
+              <div className="space-y-2">
+                <p className="text-sm font-semibold">
+                  🗺️ Map of {compound.trim()}, {district}
+                </p>
+                <div className="overflow-hidden rounded-xl border border-gray-200">
+                  <CompoundPreview
+                    lat={compoundMap.lat}
+                    lng={compoundMap.lng}
+                    places={places}
+                  />
+                </div>
+                {placesStatus === "loading" && (
+                  <p className="text-xs text-gray-500">Finding named places nearby…</p>
+                )}
+                {placesStatus === "error" && (
+                  <p className="text-xs text-zred">
+                    Couldn&apos;t load named places.{" "}
+                    <button
+                      type="button"
+                      onClick={() => setPlacesRetry((r) => r + 1)}
+                      className="font-semibold underline"
+                    >
+                      Retry
+                    </button>
+                  </p>
+                )}
+                {placesStatus === "ok" && places.length === 0 && (
+                  <p className="text-xs text-gray-500">
+                    No named places are mapped around here yet, but you&apos;ll still place the
+                    pin in the next step.
+                  </p>
+                )}
+                {places.length > 0 && (
+                  <div className="space-y-1">
+                    <p className="text-xs font-semibold text-zdeep">
+                      🧭 {places.length} named places around {compound.trim()} (from
+                      OpenStreetMap)
+                    </p>
+                    <div className="flex max-h-24 flex-wrap gap-1.5 overflow-y-auto rounded-xl border border-gray-200 bg-white p-2">
+                      {places.map((p) => (
+                        <span
+                          key={`${p.name}-${p.lat}-${p.lng}`}
+                          className="rounded-full border border-zgreen/20 bg-zcream px-2 py-0.5 text-[11px] font-semibold text-zdeep"
+                        >
+                          {p.emoji} {p.name}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
                 <div className="flex gap-3">
@@ -929,7 +1031,8 @@ export default function Report() {
                       lng={pos.lng}
                       accuracy={moved ? null : acc}
                       onChange={moveTo}
-                      minZoom={regionSeeded ? (compound.trim() ? 15 : 13) : 16}
+                      minZoom={regionSeeded && !compound.trim() ? 13 : 16}
+                      places={compound.trim() ? places : []}
                     />
                   </div>
                 ) : (
@@ -943,8 +1046,14 @@ export default function Report() {
                 </p>
                 {regionSeeded && (
                   <p className="text-xs font-semibold text-zdeep">
-                    🎯 Map centred on {regionName} — tap your exact spot so the council can
+                    🎯 Map centred on {regionName}. Tap your exact spot so the council can
                     reach it fast.
+                  </p>
+                )}
+                {compound.trim() && places.length > 0 && (
+                  <p className="text-xs text-gray-500">
+                    🧭 Landmarks around {compound.trim()} (schools, clinics, shops…) are
+                    labelled on the map, so use them to place the pin exactly.
                   </p>
                 )}
                 {!locationOk && pos && (
@@ -1017,7 +1126,7 @@ export default function Report() {
                   <p className="text-3xl">🤖</p>
                   <h2 className="text-lg font-extrabold">Let the AI check your photo</h2>
                   <p className="text-xs text-gray-600">
-                    We&apos;ll identify the issue and route it to the right department — you
+                    We&apos;ll identify the issue and route it to the right department. You
                     confirm before anything is sent.
                   </p>
                 </div>
@@ -1052,7 +1161,7 @@ export default function Report() {
                   <p className="text-xs text-gray-600 italic">“{aiResult.reason}”</p>
                 )}
                 <p className="text-xs text-gray-600">
-                  Photos can look alike — a baby fallen in a well vs a blocked drain, for
+                  Photos can look alike, like a baby fallen in a well vs a blocked drain, for
                   example. Please confirm or pick the correct issue so it reaches the right
                   department.
                 </p>

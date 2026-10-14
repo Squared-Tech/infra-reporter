@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "FixZed — Citizen reporting for Zambia's local councils",
+  title: "FixZed: Citizen reporting for Zambia's local councils",
   description:
     "Report infrastructure and community issues with one photo. FixZed's AI routes your report to the right council department with a location-confidence score, and emergencies alert the council live.",
 };

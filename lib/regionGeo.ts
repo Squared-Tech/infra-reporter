@@ -1,5 +1,16 @@
 export type RegionPoint = { lat: number; lng: number };
 
+import { COMPOUND_GEO } from "./compoundGeo";
+
+// Exact township/locality centres from OCHA COD-AB admin4 — instant and offline.
+export function compoundCenterLocal(
+  compound: string,
+  district: string
+): RegionPoint | null {
+  const c = COMPOUND_GEO[district]?.[compound];
+  return c ? { lat: c[0], lng: c[1] } : null;
+}
+
 // Last-resort centres (used only if geocoding is unreachable) — province centroids.
 export const PROVINCE_CENTERS: Record<string, RegionPoint> = {
   Central: { lat: -14.6, lng: 29.75 },
@@ -52,6 +63,13 @@ export async function compoundCenter(
   const key = `${province}/${district}/${compound}`;
   const hit = cache.get(key);
   if (hit) return hit;
+
+  // Local dataset covers every listed compound; Nominatim only for free-typed ones.
+  const local = compoundCenterLocal(compound, district);
+  if (local) {
+    cache.set(key, local);
+    return local;
+  }
 
   let point: RegionPoint | null = null;
   try {

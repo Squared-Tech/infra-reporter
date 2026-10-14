@@ -32,7 +32,7 @@ function pinColor(level: string | null) {
 const TABS = [
   { key: "reported", label: "🚨 Reported", empty: "Nothing waiting. Smooth sailing! 🌊" },
   { key: "in_progress", label: "🔧 In progress", empty: "No crews out right now. ☕" },
-  { key: "fixed", label: "✅ Fixed", empty: "No fixes yet — the win list is waiting for you! 🏆" },
+  { key: "fixed", label: "✅ Fixed", empty: "No fixes yet. The win list is waiting for you! 🏆" },
 ] as const;
 type TabKey = (typeof TABS)[number]["key"];
 
@@ -93,7 +93,7 @@ export default function Dashboard() {
             setAlarm(r);
             if (typeof Notification !== "undefined" && Notification.permission === "granted") {
               new Notification(`🚨 FIXZED ${deptInfo(r.department).name}`, {
-                body: `${catInfo(r.category).label} (severity ${r.severity}/5) — ${
+                body: `${catInfo(r.category).label} (severity ${r.severity}/5), ${
                   r.address ?? "location pending"
                 }`,
               });
@@ -499,7 +499,7 @@ export default function Dashboard() {
                               <span className="text-gray-500">📞 no phone given</span>
                             )}
                           </p>
-                          <p className="text-gray-600">✉️ {r.reporter_email ?? "—"}</p>
+                          <p className="text-gray-600">✉️ {r.reporter_email ?? "No email"}</p>
                           {r.note && <p className="text-gray-600">📝 {r.note}</p>}
                         </div>
                       </div>

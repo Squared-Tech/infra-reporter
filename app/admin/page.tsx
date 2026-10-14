@@ -101,25 +101,42 @@ export default function Admin() {
   if (role !== "admin") return null;
 
   const inputCls =
-    "w-full border border-gray-300 rounded-xl p-3 focus:outline-none focus:ring-2 focus:ring-zgreen";
+    "w-full rounded-xl border border-amber-300/30 bg-black/30 p-3 text-white placeholder-amber-100/40 focus:outline-none focus:ring-2 focus:ring-amber-300";
+
+  const counts = {
+    admin: users.filter((u) => u.role === "admin").length,
+    council: users.filter((u) => u.role === "council").length,
+    citizen: users.filter((u) => u.role !== "admin" && u.role !== "council").length,
+  };
+
+  const card = "rounded-xl border border-amber-300/30 bg-white/5 px-4 py-3 text-center";
+
+  const roleChip: Record<string, string> = {
+    admin: "bg-amber-300 text-black",
+    council: "bg-emerald-500 text-white",
+    citizen: "bg-slate-500 text-white",
+  };
 
   return (
-    <div className="min-h-screen">
-      <header className="bg-zdeep text-white">
-        <div className="max-w-3xl mx-auto px-4 py-3 flex items-center justify-between">
+    <div className="min-h-screen bg-zdeep text-white">
+      <header className="border-b-4 border-amber-300 bg-gradient-to-r from-black via-slate-900 to-black">
+        <div className="max-w-3xl mx-auto px-4 py-4 flex items-center justify-between gap-3 flex-wrap">
           <div className="flex items-center gap-3">
             <a href="/">
-              <Wordmark light className="text-2xl" />
+              <Wordmark light className="text-3xl" />
             </a>
-            <span className="hidden sm:inline bg-white/15 rounded-full px-3 py-1 text-sm font-semibold">
-              👑 Admin · account manager
+            <span className="rounded-full bg-amber-300 px-3 py-1 text-xs font-black uppercase tracking-widest text-black">
+              👑 Admin console
             </span>
           </div>
           <div className="flex items-center gap-3 text-sm">
-            <a href="/dashboard" className="underline font-semibold">
+            <a href="/dashboard" className="font-semibold text-amber-300 underline">
               Dashboard
             </a>
-            <button onClick={logout} className="bg-white/15 hover:bg-white/25 rounded-full px-3 py-1">
+            <button
+              onClick={logout}
+              className="rounded-full border border-amber-300/50 px-3 py-1 font-semibold hover:bg-amber-300/15"
+            >
               Log out
             </button>
           </div>
@@ -128,42 +145,83 @@ export default function Admin() {
       </header>
 
       <main className="max-w-3xl mx-auto p-4 space-y-4">
-        <div className="bg-white rounded-2xl shadow p-5 space-y-3 border-t-4 border-zdeep">
-          <h1 className="text-2xl font-extrabold">Open a new account</h1>
-          <p className="text-sm text-gray-600">
-            Create an account for anyone — citizens, other council members, or another
+        <div className="rounded-2xl border border-amber-300/30 bg-white/5 p-5 shadow-2xl backdrop-blur">
+          <h1 className="text-2xl font-black text-amber-300">Accounts</h1>
+          <p className="mt-1 text-sm text-amber-100/70">
+            Signed in as {email}. You can open accounts for anyone, and change who
+            is a citizen, council member or admin.
+          </p>
+          <div className="mt-4 grid gap-3 sm:grid-cols-3">
+            <div className={card}>
+              <p className="text-3xl font-black text-amber-300">{counts.admin}</p>
+              <p className="text-xs uppercase tracking-wider text-amber-100/70">
+                👑 Admins
+              </p>
+            </div>
+            <div className={card}>
+              <p className="text-3xl font-black text-emerald-400">{counts.council}</p>
+              <p className="text-xs uppercase tracking-wider text-amber-100/70">
+                🏛️ Council
+              </p>
+            </div>
+            <div className={card}>
+              <p className="text-3xl font-black text-white">{counts.citizen}</p>
+              <p className="text-xs uppercase tracking-wider text-amber-100/70">
+                🙋 Citizens
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="rounded-2xl border-2 border-amber-300/60 bg-white/5 p-5 space-y-3 shadow-2xl backdrop-blur">
+          <h2 className="text-xl font-black text-amber-300">✨ Open a new account</h2>
+          <p className="text-sm text-amber-100/70">
+            Create an account for anyone: citizens, other council members, or another
             admin. The new user can log in straight away with the password you set.
           </p>
           <input placeholder="Full name" value={name} onChange={(e) => setName(e.target.value)} className={inputCls} />
           <input placeholder="Email" type="email" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} className={inputCls} />
           <input placeholder="Temporary password (min 6)" type="text" value={newPass} onChange={(e) => setNewPass(e.target.value)} className={inputCls} />
           <select value={newRole} onChange={(e) => setNewRole(e.target.value)} className={inputCls}>
-            <option value="citizen">🙋 Citizen</option>
-            <option value="council">🏛️ Council member</option>
-            <option value="admin">👑 Admin (can create accounts)</option>
+            <option className="text-black" value="citizen">🙋 Citizen</option>
+            <option className="text-black" value="council">🏛️ Council member</option>
+            <option className="text-black" value="admin">👑 Admin (can create accounts)</option>
           </select>
           <button
             onClick={create}
             disabled={busy || !newEmail || newPass.length < 6}
-            className="w-full bg-zdeep hover:brightness-125 text-white font-bold rounded-xl p-3 disabled:opacity-40"
+            className="w-full rounded-xl bg-amber-300 p-3 font-black text-black shadow-lg hover:brightness-110 disabled:opacity-40"
           >
             {busy ? "Creating..." : "Create account"}
           </button>
-          {msg && <p className="text-zgreen text-sm font-semibold">{msg}</p>}
+          {msg && (
+            <p className="rounded-lg bg-emerald-500/20 p-2 text-sm font-semibold text-emerald-200">
+              ✅ {msg}
+            </p>
+          )}
         </div>
 
-        <div className="bg-white rounded-2xl shadow p-5 space-y-3 border border-gray-100">
-          <h2 className="text-xl font-extrabold">All accounts ({users.length})</h2>
-          {err && <p className="text-zred text-sm">{err}</p>}
+        <div className="rounded-2xl border border-amber-300/30 bg-white/5 p-5 space-y-3 shadow-2xl backdrop-blur">
+          <h2 className="text-xl font-black text-amber-300">All accounts ({users.length})</h2>
+          {err && (
+            <p className="rounded-lg bg-zred/25 p-2 text-sm text-red-200">{err}</p>
+          )}
           <div className="space-y-2">
             {users.map((u) => (
               <div
                 key={u.id}
-                className="flex items-center gap-3 rounded-xl border border-gray-200 p-3 text-sm flex-wrap sm:flex-nowrap"
+                className="flex items-center gap-3 rounded-xl border border-amber-300/20 bg-black/25 p-3 text-sm flex-wrap sm:flex-nowrap"
               >
+                <span
+                  className={`shrink-0 rounded-full px-2 py-1 text-xs font-black ${
+                    roleChip[u.role] ?? roleChip.citizen
+                  }`}
+                >
+                  {u.role}
+                </span>
                 <div className="flex-1 min-w-0">
-                  <p className="font-semibold truncate">{u.email}</p>
-                  <p className="text-xs text-gray-500">
+                  <p className="font-semibold truncate text-white">{u.email}</p>
+                  <p className="text-xs text-amber-100/60">
                     {u.email === email ? "you · " : ""}
                     {ROLE_LABEL[u.role] ?? u.role}
                   </p>
@@ -171,16 +229,16 @@ export default function Admin() {
                 <select
                   value={u.role}
                   onChange={(e) => setRole(u.id, e.target.value)}
-                  className="border border-gray-300 rounded-lg p-2 text-sm bg-white"
+                  className="rounded-lg border border-amber-300/30 bg-black/40 p-2 text-sm text-white"
                 >
-                  <option value="citizen">Citizen</option>
-                  <option value="council">Council</option>
-                  <option value="admin">Admin</option>
+                  <option className="text-black" value="citizen">Citizen</option>
+                  <option className="text-black" value="council">Council</option>
+                  <option className="text-black" value="admin">Admin</option>
                 </select>
               </div>
             ))}
             {users.length === 0 && !err && (
-              <p className="text-gray-500 text-sm">Loading accounts...</p>
+              <p className="text-amber-100/60 text-sm">Loading accounts...</p>
             )}
           </div>
         </div>

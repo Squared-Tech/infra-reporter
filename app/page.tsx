@@ -17,7 +17,7 @@ const SERVICES = [
     img: "/img/fire-rescue.png",
     tag: "EMERGENCY",
     title: "Fire & Rescue Services",
-    text: "Fires, trapped persons, downed powerlines and electrical faults go straight to the Fire and Rescue Unit — and trigger a live siren on the council dashboard.",
+    text: "Fires, trapped persons, downed powerlines and electrical faults go straight to the Fire and Rescue Unit, and trigger a live siren on the council dashboard.",
   },
   {
     img: "/img/road-works.png",
@@ -37,17 +37,17 @@ const STEPS = [
   {
     n: "1",
     title: "Snap a photo",
-    text: "Take a picture of the problem from your phone. Your location is captured automatically — no forms, no phone calls, no queueing at council offices.",
+    text: "Take a picture of the problem from your phone. Your location is captured automatically. No forms, no phone calls, no queueing at council offices.",
   },
   {
     n: "2",
     title: "AI classifies & routes it",
-    text: "FixZed's AI reads the photo, identifies the issue from 18 categories and routes it to the correct department. You confirm before it is sent — you stay in control.",
+    text: "FixZed's AI reads the photo, identifies the issue from 18 categories and routes it to the correct department. You confirm before it is sent, so you stay in control.",
   },
   {
     n: "3",
     title: "Location confidence scored",
-    text: "Every report carries a 0–100 location-confidence score, so crews know exactly how precisely to trust the pin and can find the site first time.",
+    text: "Every report carries a 0 to 100 location-confidence score, so crews know exactly how precisely to trust the pin and can find the site first time.",
   },
   {
     n: "4",
@@ -59,7 +59,7 @@ const STEPS = [
 const STATS = [
   { value: "7", label: "Council departments connected" },
   { value: "18", label: "Issue categories AI can detect" },
-  { value: "0–100", label: "Location-confidence score" },
+  { value: "0 to 100", label: "Location-confidence score" },
   { value: "24/7", label: "Live emergency monitoring" },
 ];
 
@@ -141,7 +141,7 @@ export default function Home() {
           </h1>
           <p className="mt-4 max-w-xl text-lg text-gray-200">
             FixZed is the citizen reporting platform for local councils across Zambia. One photo
-            is all it takes — our AI classifies the issue, scores how precise your location is,
+            is all it takes. Our AI classifies the issue, scores how precise your location is,
             and routes it to the right department in seconds. Emergencies ring an alarm at the
             council, live.
           </p>
@@ -184,7 +184,7 @@ export default function Home() {
         </h2>
         <p className="mt-2 max-w-2xl text-gray-600">
           From a burst pipe to a fire hazard, FixZed connects residents directly to the council
-          teams responsible — no middlemen, no lost paperwork.
+          teams responsible. No middlemen, no lost paperwork.
         </p>
         <div className="mt-8 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
           {SERVICES.map((s) => (
@@ -221,7 +221,7 @@ export default function Home() {
         <div className="mx-auto flex max-w-6xl flex-col items-center gap-4 px-4 py-10 text-center text-white md:flex-row md:text-left">
           <div className="text-5xl">🚨</div>
           <div className="flex-1">
-            <h2 className="text-2xl font-black">Emergencies don't wait — and neither does FixZed</h2>
+            <h2 className="text-2xl font-black">Emergencies don't wait, and neither does FixZed</h2>
             <p className="mt-1 text-red-100">
               Urgent reports trigger a live flashing alarm with siren on the council dashboard and
               alert the Police Department with a flash call and SMS, day or night.
@@ -294,7 +294,7 @@ export default function Home() {
             <p className="mt-4 leading-relaxed text-gray-300">
               FixZed is a civic technology platform built for local councils across Zambia. It turns
               every resident's phone into a direct line to the people who maintain our roads,
-              drains, water supply and public safety — and gives council staff one live dashboard
+              drains, water supply and public safety, and gives council staff one live dashboard
               to see, prioritise and act on every issue in their district.
             </p>
             <p className="mt-3 leading-relaxed text-gray-400">

@@ -3,6 +3,8 @@ import { useEffect, useState } from "react";
 import { Circle, MapContainer, Marker, TileLayer, useMap, useMapEvents } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
+import type { Place } from "@/lib/places";
+import { placeIcon } from "./CompoundPreview";
 
 type Props = {
   lat: number;
@@ -10,6 +12,7 @@ type Props = {
   accuracy: number | null;
   onChange: (lat: number, lng: number) => void;
   minZoom?: number;
+  places?: Place[];
 };
 
 const pinIcon = L.divIcon({
@@ -42,6 +45,7 @@ export default function LocationPicker({
   accuracy,
   onChange,
   minZoom = 16,
+  places = [],
 }: Props) {
   const [ready, setReady] = useState(false);
   useEffect(() => setReady(true), []);
@@ -68,6 +72,14 @@ export default function LocationPicker({
           pathOptions={{ color: "#198a00", weight: 1, fillOpacity: 0.12 }}
         />
       )}
+      {places.map((p) => (
+        <Marker
+          key={`${p.name}-${p.lat}-${p.lng}`}
+          position={[p.lat, p.lng]}
+          icon={placeIcon(p)}
+          interactive={false}
+        />
+      ))}
       <Marker
         position={[lat, lng]}
         icon={pinIcon}
