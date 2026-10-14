@@ -4,8 +4,6 @@ import { Circle, MapContainer, Marker, useMap, useMapEvents } from "react-leafle
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import MapTiles from "./MapTiles";
-import type { Place } from "@/lib/places";
-import { placeIcon } from "./CompoundPreview";
 
 type Props = {
   lat: number;
@@ -13,12 +11,20 @@ type Props = {
   accuracy: number | null;
   onChange: (lat: number, lng: number) => void;
   minZoom?: number;
-  places?: Place[];
+  centre?: { lat: number; lng: number } | null;
+  readOnly?: boolean;
 };
 
 const pinIcon = L.divIcon({
   className: "",
   html: '<div style="font-size:30px;line-height:30px;transform:translateY(-15px);filter:drop-shadow(0 2px 2px rgba(0,0,0,.4));cursor:grab">📍</div>',
+  iconSize: [30, 30],
+  iconAnchor: [15, 15],
+});
+
+const gpsIcon = L.divIcon({
+  className: "",
+  html: '<div style="font-size:30px;line-height:30px;transform:translateY(-15px);filter:drop-shadow(0 2px 2px rgba(0,0,0,.4))">🧍</div>',
   iconSize: [30, 30],
   iconAnchor: [15, 15],
 });
@@ -32,11 +38,17 @@ function ClickCatcher({ onPick }: { onPick: (lat: number, lng: number) => void }
   return null;
 }
 
-function FollowPin({ lat, lng, minZoom }: { lat: number; lng: number; minZoom: number }) {
+function FollowView({
+  centre,
+  minZoom,
+}: {
+  centre: { lat: number; lng: number };
+  minZoom: number;
+}) {
   const map = useMap();
   useEffect(() => {
-    map.setView([lat, lng], Math.max(map.getZoom(), minZoom), { animate: true });
-  }, [lat, lng, map, minZoom]);
+    map.setView([centre.lat, centre.lng], Math.max(map.getZoom(), minZoom), { animate: true });
+  }, [centre.lat, centre.lng, map, minZoom]);
   return null;
 }
 
@@ -46,18 +58,23 @@ export default function LocationPicker({
   accuracy,
   onChange,
   minZoom = 16,
-  places = [],
+  centre = null,
+  readOnly = false,
 }: Props) {
   const [ready, setReady] = useState(false);
   useEffect(() => setReady(true), []);
 
   if (!ready) return <div style={{ height: 300 }} />;
 
+  const view = centre ?? { lat, lng };
+
   return (
     <MapContainer
-      center={[lat, lng]}
+      center={[view.lat, view.lng]}
       zoom={minZoom}
       style={{ height: 300, width: "100%" }}
+      dragging={!readOnly}
+      doubleClickZoom={!readOnly}
       ref={(m) => {
         if (m) setTimeout(() => m.invalidateSize(), 300);
       }}
@@ -70,18 +87,10 @@ export default function LocationPicker({
           pathOptions={{ color: "#198a00", weight: 1, fillOpacity: 0.12 }}
         />
       )}
-      {places.map((p) => (
-        <Marker
-          key={`${p.name}-${p.lat}-${p.lng}`}
-          position={[p.lat, p.lng]}
-          icon={placeIcon(p)}
-          interactive={false}
-        />
-      ))}
       <Marker
         position={[lat, lng]}
-        icon={pinIcon}
-        draggable
+        icon={readOnly ? gpsIcon : pinIcon}
+        draggable={!readOnly}
         eventHandlers={{
           dragend: (e) => {
             const p = (e.target as L.Marker).getLatLng();
@@ -89,8 +98,8 @@ export default function LocationPicker({
           },
         }}
       />
-      <ClickCatcher onPick={onChange} />
-      <FollowPin lat={lat} lng={lng} minZoom={minZoom} />
+      {!readOnly && <ClickCatcher onPick={onChange} />}
+      <FollowView centre={view} minZoom={minZoom} />
     </MapContainer>
   );
 }

@@ -8,7 +8,6 @@ import { Stripe, Wordmark } from "@/components/Brand";
 import { PROVINCES, PROVINCE_NAMES } from "@/lib/zambia";
 import { regionCenter, compoundCenter } from "@/lib/regionGeo";
 import { COMPOUNDS } from "@/lib/compounds";
-import { fetchPlaces, type Place } from "@/lib/places";
 import {
   CATEGORIES,
   CATEGORY_IDS,
@@ -113,7 +112,7 @@ const STEPS = [
   { id: "brief", label: "Where are you?" },
   { id: "photo", label: "Add a photo" },
   { id: "details", label: "Your details" },
-  { id: "pin", label: "Pin the spot" },
+  { id: "pin", label: "Check the compound map" },
   { id: "check", label: "AI check" },
   { id: "category", label: "Confirm & send" },
 ] as const;
@@ -156,9 +155,6 @@ export default function Report() {
   const seedRef = useRef<LatLng | null>(null);
   const [regionName, setRegionName] = useState<string | null>(null);
   const [compoundMap, setCompoundMap] = useState<LatLng | null>(null);
-  const [places, setPlaces] = useState<Place[]>([]);
-  const [placesStatus, setPlacesStatus] = useState<"idle" | "loading" | "ok" | "error">("idle");
-  const [placesRetry, setPlacesRetry] = useState(0);
 
   const preview = useMemo(() => (file ? URL.createObjectURL(file) : null), [file]);
 
@@ -188,11 +184,15 @@ export default function Report() {
       (e) => {
         if (e.code === 1) {
           setGpsErr(
-            "Location is blocked. Allow location access in your browser settings, then refresh, or tap the map to place the pin yourself."
+            sceneRef.current === "yes"
+              ? "Location is blocked. Allow location access in your browser settings, then tap Re-detect my location."
+              : "Location is blocked. Allow location access in your browser settings, then refresh, or tap the map to place the pin yourself."
           );
         } else {
           setGpsErr(
-            "GPS isn't available right now. Tap the map below to place the pin on the problem."
+            sceneRef.current === "yes"
+              ? "GPS isn't available right now. Move to the open and tap Re-detect my location."
+              : "GPS isn't available right now. Tap the map below to place the pin on the problem."
           );
         }
         setPos((p) => p ?? { lat: FALLBACK.lat, lng: FALLBACK.lng });
@@ -206,7 +206,11 @@ export default function Report() {
     if (!ready || pos) return;
     const t = setTimeout(() => {
       setPos((p) => p ?? { lat: FALLBACK.lat, lng: FALLBACK.lng });
-      setGpsErr("GPS is taking too long. Tap the map below to place the pin on the problem.");
+      setGpsErr(
+        sceneRef.current === "yes"
+          ? "GPS is taking too long. Move somewhere with a clear view of the sky, then tap Re-detect my location."
+          : "GPS is taking too long. Tap the map below to place the pin on the problem."
+      );
     }, 10000);
     return () => clearTimeout(t);
   }, [ready, pos]);
@@ -241,42 +245,23 @@ export default function Report() {
     };
   }, [province, district, compound, scene]);
 
-  // When a compound is chosen, load its map centre and the named places around it
-  // (schools, clinics, shops...) so reporters can orient themselves by landmarks.
+  // When a compound is chosen, resolve its map centre so the compound map can
+  // be shown here and used to frame the final pin map.
   useEffect(() => {
     const cname = compound.trim();
     if (!cname || !district || !province) {
       setCompoundMap(null);
-      setPlaces([]);
-      setPlacesStatus("idle");
       return;
     }
     let cancelled = false;
-    setPlacesStatus("loading");
     (async () => {
       const c = await compoundCenter(cname, district, province);
-      if (cancelled) return;
-      if (!c) {
-        setCompoundMap(null);
-        setPlaces([]);
-        setPlacesStatus("error");
-        return;
-      }
-      setCompoundMap(c);
-      const items = await fetchPlaces(c.lat, c.lng);
-      if (cancelled) return;
-      if (items === null) {
-        setPlaces([]);
-        setPlacesStatus("error");
-      } else {
-        setPlaces(items);
-        setPlacesStatus("ok");
-      }
+      if (!cancelled) setCompoundMap(c);
     })();
     return () => {
       cancelled = true;
     };
-  }, [province, district, compound, placesRetry]);
+  }, [province, district, compound]);
 
   async function onPick(f: File | null) {
     setFile(f);
@@ -378,8 +363,15 @@ export default function Report() {
   const photoFresh = !!photoTime && !photoOld;
   const source = moved ? (usedPhoto ? "photo" : "manual") : "gps";
 
+  // Being on site means the live GPS is the location, so a forwarded photo (no
+  // tags) must not force a manual pin the reporter is not allowed to place.
   const locationOk =
-    !!pos && (forwarded ? moved : moved || (acc !== null && acc <= MAX_OK_ACCURACY));
+    !!pos &&
+    (scene === "yes"
+      ? acc !== null && acc <= MAX_OK_ACCURACY
+      : forwarded
+      ? moved
+      : moved || (acc !== null && acc <= MAX_OK_ACCURACY));
 
   const phoneOk = phone.replace(/\D/g, "").length >= 9;
   const compoundOptions = COMPOUNDS[district] ?? [];
@@ -398,7 +390,11 @@ export default function Report() {
       ? { text: usedPhoto ? "Using photo location" : "Pin placed by you", color: "text-zgreen" }
       : acc === null
       ? pos
-        ? { text: "Place the pin on the map", color: "text-zorange" }
+        ? {
+            text:
+              scene === "yes" ? "Waiting for a strong GPS fix..." : "Place the pin on the map",
+            color: "text-zorange",
+          }
         : { text: "Finding your location...", color: "text-gray-500" }
     : acc <= 20
     ? { text: `Excellent (±${acc} m)`, color: "text-zgreen" }
@@ -771,8 +767,18 @@ export default function Report() {
             <div className="rounded-xl border border-zred/50 bg-zred/10 p-3 text-sm">
               <p className="font-bold text-zred">This looks like a WhatsApp photo</p>
               <p>
-                WhatsApp removes a photo&apos;s location. Please <b>place the pin manually</b>{" "}
-                on the map below at the exact spot of the problem.
+                {scene === "yes" ? (
+                  <>
+                    WhatsApp strips a photo&apos;s location, but you are at the scene so your{" "}
+                    <b>live GPS</b> pins the report instead.
+                  </>
+                ) : (
+                  <>
+                    WhatsApp removes a photo&apos;s location. Please{" "}
+                    <b>place the pin manually</b> on the map below at the exact spot of the
+                    problem.
+                  </>
+                )}
               </p>
             </div>
           )}
@@ -949,48 +955,13 @@ export default function Report() {
                   <CompoundPreview
                     lat={compoundMap.lat}
                     lng={compoundMap.lng}
-                    places={places}
+                    name={compound.trim()}
                   />
                 </div>
-                {placesStatus === "loading" && (
-                  <p className="text-xs text-gray-500">Finding named places nearby…</p>
-                )}
-                {placesStatus === "error" && (
-                  <p className="text-xs text-zred">
-                    Couldn&apos;t load named places.{" "}
-                    <button
-                      type="button"
-                      onClick={() => setPlacesRetry((r) => r + 1)}
-                      className="font-semibold underline"
-                    >
-                      Retry
-                    </button>
-                  </p>
-                )}
-                {placesStatus === "ok" && places.length === 0 && (
-                  <p className="text-xs text-gray-500">
-                    No named places are mapped around here yet, but you&apos;ll still place the
-                    pin in the next step.
-                  </p>
-                )}
-                {places.length > 0 && (
-                  <div className="space-y-1">
-                    <p className="text-xs font-semibold text-zdeep">
-                      🧭 {places.length} named places around {compound.trim()} (from
-                      OpenStreetMap)
-                    </p>
-                    <div className="flex max-h-24 flex-wrap gap-1.5 overflow-y-auto rounded-xl border border-gray-200 bg-white p-2">
-                      {places.map((p) => (
-                        <span
-                          key={`${p.name}-${p.lat}-${p.lng}`}
-                          className="rounded-full border border-zgreen/20 bg-zcream px-2 py-0.5 text-[11px] font-semibold text-zdeep"
-                        >
-                          {p.emoji} {p.name}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                )}
+                <p className="text-xs text-gray-500">
+                  This is the compound you picked. The next map is the same area, where you
+                  mark the exact problem.
+                </p>
               </div>
             )}
           </div>
@@ -1018,7 +989,10 @@ export default function Report() {
               <div className="flex min-h-[75vh] items-center justify-center">
               <div className="w-full max-w-lg rounded-2xl border-4 border-zgreen bg-white/95 p-5 space-y-3 shadow-2xl">
                 <div className="flex items-center justify-between text-sm">
-                  <p className="font-semibold">📍 Problem location</p>
+                  <p className="font-semibold">
+                    🗺️ Map of {compound.trim() || regionName || district}
+                    {compound.trim() ? `, ${district}` : ""}
+                  </p>
                   <p className={`font-semibold ${quality.color}`}>{quality.text}</p>
                 </div>
 
@@ -1031,8 +1005,9 @@ export default function Report() {
                       lng={pos.lng}
                       accuracy={moved ? null : acc}
                       onChange={moveTo}
-                      minZoom={regionSeeded && !compound.trim() ? 13 : 16}
-                      places={compound.trim() ? places : []}
+                      minZoom={compoundMap || regionSeeded ? 15 : 16}
+                      centre={compoundMap}
+                      readOnly={scene === "yes"}
                     />
                   </div>
                 ) : (
@@ -1041,26 +1016,30 @@ export default function Report() {
                   </div>
                 )}
 
-                <p className="text-xs text-gray-500">
-                  Tap the map or drag the red pin to place it exactly on the problem.
-                </p>
-                {regionSeeded && (
-                  <p className="text-xs font-semibold text-zdeep">
-                    🎯 Map centred on {regionName}. Tap your exact spot so the council can
-                    reach it fast.
-                  </p>
-                )}
-                {compound.trim() && places.length > 0 && (
+                {scene === "yes" ? (
                   <p className="text-xs text-gray-500">
-                    🧭 Landmarks around {compound.trim()} (schools, clinics, shops…) are
-                    labelled on the map, so use them to place the pin exactly.
+                    🧍 You said you are at the problem, so this report is pinned by your live
+                    GPS and the map cannot be edited. Check the marker is on the problem and
+                    use <b>Re-detect my location</b> if the pin looks wrong.
                   </p>
+                ) : (
+                  <>
+                    <p className="text-xs text-gray-500">
+                      Tap the map or drag the red pin to place it exactly on the problem.
+                    </p>
+                    {regionSeeded && (
+                      <p className="text-xs font-semibold text-zdeep">
+                        🎯 Map centred on {regionName}. Tap your exact spot so the council can
+                        reach it fast.
+                      </p>
+                    )}
+                  </>
                 )}
                 {!locationOk && pos && (
                   <p className="text-xs text-zred">
                     {forwarded || scene === "no"
                       ? "Tap the map to place the pin on the exact spot to continue."
-                      : "GPS is weak. Move outside, or tap the map to place the pin on the exact spot."}
+                      : "GPS is weak. Move outside, wait for the accuracy to improve, then re-detect."}
                   </p>
                 )}
                 <div className="flex gap-4 flex-wrap">
