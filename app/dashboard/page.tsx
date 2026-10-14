@@ -7,6 +7,7 @@ import { playSiren } from "@/lib/siren";
 import { Stripe, Wordmark } from "@/components/Brand";
 import { PROVINCES } from "@/lib/zambia";
 import { DEPARTMENT_IDS, deptInfo, catInfo } from "@/lib/departments";
+import { caseMessage, copyText, waDigits, waShareUrl } from "@/lib/share";
 
 const ReportMap = dynamic(() => import("@/components/ReportMap"), { ssr: false });
 const ReportPinMap = dynamic(() => import("@/components/ReportPinMap"), { ssr: false });
@@ -50,6 +51,7 @@ export default function Dashboard() {
   const [dept, setDept] = useState("");
   const [alarm, setAlarm] = useState<any | null>(null);
   const [live, setLive] = useState(false);
+  const [copied, setCopied] = useState("");
 
   async function load() {
     const { data } = await supabase
@@ -503,7 +505,7 @@ export default function Dashboard() {
                           {r.note && <p className="text-gray-600">📝 {r.note}</p>}
                         </div>
                       </div>
-                      <div className="md:w-40 shrink-0">
+                      <div className="md:w-40 shrink-0 space-y-2">
                         <select
                           value={r.status}
                           onChange={(e) => setStatus(r.id, e.target.value)}
@@ -513,6 +515,39 @@ export default function Dashboard() {
                           <option value="in_progress">🔧 In progress</option>
                           <option value="fixed">✅ Fixed</option>
                         </select>
+                        <a
+                          href={waShareUrl(r)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="block w-full rounded-lg bg-zgreen p-2 text-center text-sm font-bold text-white hover:brightness-110"
+                        >
+                          📲 Share on WhatsApp
+                        </a>
+                        {waDigits(r.reporter_phone) && (
+                          <a
+                            href={waShareUrl(r, r.reporter_phone)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="block w-full rounded-lg border-2 border-zgreen p-2 text-center text-sm font-bold text-zgreen hover:bg-zgreen/10"
+                          >
+                            💬 Message reporter
+                          </a>
+                        )}
+                        <button
+                          onClick={() => {
+                            copyText(caseMessage(r)).then((ok) => {
+                              setCopied(ok ? r.id : `fail:${r.id}`);
+                              setTimeout(() => setCopied(""), 2500);
+                            });
+                          }}
+                          className="w-full rounded-lg border border-gray-300 p-2 text-sm font-semibold text-gray-700 hover:bg-gray-50"
+                        >
+                          {copied === r.id
+                            ? "✅ Copied"
+                            : copied === `fail:${r.id}`
+                            ? "⚠️ Use Share instead"
+                            : "📋 Copy summary"}
+                        </button>
                       </div>
                     </div>
                   </div>
