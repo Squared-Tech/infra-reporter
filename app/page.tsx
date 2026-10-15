@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/useAuth";
 import { Stripe, Wordmark } from "@/components/Brand";
-import InstallPrompt from "@/components/InstallPrompt";
+import InstallButton from "@/components/InstallButton";
 import { DEPARTMENTS, DEPARTMENT_IDS } from "@/lib/departments";
 
 const SERVICES = [
@@ -12,7 +12,7 @@ const SERVICES = [
     img: "/img/crime-report.png",
     tag: "EMERGENCY",
     title: "Crime & Public Safety",
-    text: "Report petty crime, vandalism and public safety threats. The Police Department is alerted instantly with a flash call and SMS.",
+    text: "Report petty crime, vandalism and public safety threats. The Police Department sees it on their live dashboard the moment you send it.",
   },
   {
     img: "/img/fire-rescue.png",
@@ -53,7 +53,7 @@ const STEPS = [
   {
     n: "4",
     title: "Council responds live",
-    text: "The report appears instantly on the council dashboard. Emergencies flash red with a live siren, and the on-duty department is alerted by call and SMS.",
+    text: "The report appears instantly on the council dashboard. Emergencies flash red with a live siren, so the on-duty officer sees it without refreshing.",
   },
 ];
 
@@ -163,8 +163,17 @@ export default function Home() {
         </div>
       </section>
 
-      <div className="mx-auto max-w-6xl px-4 pt-6">
-        <InstallPrompt />
+      <div className="mx-auto max-w-6xl space-y-3 px-4 pt-6">
+        <div className="flex flex-wrap items-center gap-4 rounded-2xl border-2 border-zgreen bg-zcream p-4">
+          <p className="text-3xl">📲</p>
+          <div className="min-w-[180px] flex-1">
+            <p className="font-bold text-zdeep">Want FixZed as an app on your phone?</p>
+            <p className="text-xs text-gray-600">
+              One tap gives you a home-screen icon, full screen and a faster start for reporting.
+            </p>
+          </div>
+          <InstallButton />
+        </div>
       </div>
 
       {/* Stats strip */}
@@ -228,8 +237,8 @@ export default function Home() {
           <div className="flex-1">
             <h2 className="text-2xl font-black">Emergencies don't wait, and neither does FixZed</h2>
             <p className="mt-1 text-red-100">
-              Urgent reports trigger a live flashing alarm with siren on the council dashboard and
-              alert the Police Department with a flash call and SMS, day or night.
+              Urgent reports trigger a live flashing alarm with siren on the council dashboard,
+              day or night, and jump straight to the top of the Police queue.
             </p>
           </div>
           <Link

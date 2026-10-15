@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/useAuth";
 import { Stripe, Wordmark } from "@/components/Brand";
+import InstallButton from "@/components/InstallButton";
 
 export default function Where() {
   const { ready, email, logout } = useAuth();
@@ -100,6 +101,9 @@ export default function Where() {
           )}
         </div>
       </main>
+      <div className="mx-auto w-full max-w-lg px-5 pb-6 text-center">
+        <InstallButton compact />
+      </div>
     </div>
   );
 }

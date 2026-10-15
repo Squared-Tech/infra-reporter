@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { Stripe, Wordmark } from "@/components/Brand";
+import InstallButton from "@/components/InstallButton";
 
 export default function Login() {
   const router = useRouter();
@@ -243,6 +244,9 @@ export default function Login() {
             </button>
           </div>
         )}
+        <div className="pt-2">
+          <InstallButton compact />
+        </div>
         </div>
       </main>
     </div>
