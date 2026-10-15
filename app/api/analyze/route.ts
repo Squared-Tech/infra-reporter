@@ -60,7 +60,14 @@ export async function POST(req: Request) {
           .map((p: any) => p.text ?? "")
           .join("");
         const json = JSON.parse(text.replace(/```json|```/g, "").trim());
-        return NextResponse.json(json);
+        // A 200 here means the caller jumps straight to the confirmation step, so
+        // only a real assessment may produce one — `null` and bare strings would
+        // leave that step with nothing to render.
+        if (json && typeof json === "object" && typeof json.category === "string") {
+          return NextResponse.json(json);
+        }
+        lastError = `${model}: did not return a usable assessment`;
+        console.error(lastError, text.slice(0, 200));
       } catch {
         lastError = `${model}: could not read the AI response`;
         console.error(lastError);

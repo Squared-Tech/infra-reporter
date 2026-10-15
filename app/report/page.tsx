@@ -453,6 +453,9 @@ export default function Report() {
         throw new Error(e.error ?? "AI analysis failed");
       }
       const ai = await res.json();
+      if (!ai || typeof ai !== "object" || !ai.category) {
+        throw new Error("The AI could not read that photo. Try analysing it again.");
+      }
       setAiResult(ai);
       setChosenCategory(normalizeCategory(ai.category));
       setStep("category");
@@ -1291,6 +1294,36 @@ export default function Report() {
                     {busy ? "Analysing your photo..." : "Analyse photo →"}
                   </button>
                 </div>
+              </div>
+              </div>
+            )}
+
+            {step === "category" && !aiResult && (
+              <div className="flex min-h-[75vh] items-center justify-center">
+              <div className="w-full max-w-lg rounded-2xl border-4 border-zorange bg-white/95 p-5 space-y-3 shadow-2xl">
+                <div className="space-y-1 text-center">
+                  <p className="text-3xl">🤖</p>
+                  <h2 className="text-lg font-extrabold">The AI could not read that photo</h2>
+                  <p className="text-xs text-gray-600">
+                    Nothing was sent to the council. Try analysing the photo once more, or go back
+                    and take a clearer one of the problem.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={submit}
+                  disabled={!file || busy}
+                  className="w-full bg-zgreen hover:brightness-110 text-white font-bold rounded-xl p-3 disabled:opacity-40"
+                >
+                  {busy ? "Analysing your photo..." : "↻ Analyse again"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStep("check")}
+                  className="w-full text-sm font-semibold text-gray-500 underline"
+                >
+                  ← Back
+                </button>
               </div>
               </div>
             )}
