@@ -26,6 +26,20 @@ const FALLBACK: LatLng = { lat: -12.9922, lng: 28.5781 }; // Ndola centre, for m
 
 type LatLng = { lat: number; lng: number };
 
+const STATUS_NOTE: Record<string, string> = {
+  reported: "waiting for a crew",
+  in_progress: "already being worked on",
+};
+
+function ago(iso: string) {
+  const mins = Math.max(1, Math.round((Date.now() - new Date(iso).getTime()) / 60000));
+  if (mins < 60) return `${mins} minute${mins === 1 ? "" : "s"} ago`;
+  const hrs = Math.round(mins / 60);
+  if (hrs < 24) return `${hrs} hour${hrs === 1 ? "" : "s"} ago`;
+  const days = Math.round(hrs / 24);
+  return `${days} day${days === 1 ? "" : "s"} ago`;
+}
+
 function distanceM(a: LatLng, b: LatLng) {
   const R = 6371000;
   const rad = (x: number) => (x * Math.PI) / 180;
@@ -147,6 +161,7 @@ export default function Report() {
   const imageRef = useRef<string | null>(null);
   const [sizes, setSizes] = useState<{ orig: number; sent: number } | null>(null);
   const [alertMsg, setAlertMsg] = useState("");
+  const [dup, setDup] = useState<any | null>(null);
 
   const movedRef = useRef(false);
   const bestRef = useRef(Infinity);
@@ -433,13 +448,30 @@ export default function Report() {
     setBusy(false);
   }
 
-  async function confirmSubmit() {
+  async function confirmSubmit(force = false) {
     if (!file || !pos || !locationOk || !conf || !aiResult || !chosenCategory) return;
     setBusy(true);
     setError("");
     setSent(false);
+    setDup(null);
     setAlertMsg("");
     try {
+      // Ask before spending the upload, not after: the council either already has
+      // this case or it does not.
+      if (!force) {
+        const d = await fetch("/api/duplicates", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ category: chosenCategory, lat: pos.lat, lng: pos.lng }),
+        })
+          .then((r) => r.json())
+          .catch(() => null);
+        if (d?.duplicate && d.match) {
+          setDup(d.match);
+          setBusy(false);
+          return;
+        }
+      }
       const blob = await resize(file, 1600, 0.85);
       setSizes({ orig: file.size, sent: blob.size });
 
@@ -586,7 +618,56 @@ export default function Report() {
             {alertMsg && <p className="text-sm font-semibold text-zdeep mt-1">{alertMsg}</p>}
           </div>
         )}
-        {!sent && (
+        {dup && (
+          <div className="rounded-2xl border-2 border-zorange bg-white/95 p-4 space-y-3">
+            <p className="text-lg font-black text-zorange">🚫 Already reported</p>
+            <p className="text-sm text-gray-700">
+              {catInfo(chosenCategory ?? "").emoji}{" "}
+              <b>{catInfo(chosenCategory ?? "").label}</b> was already reported{" "}
+              <b>{dup.distance_m} m</b> from your pin, {ago(dup.created_at)}. The council has it
+              open: {STATUS_NOTE[dup.status] ?? "waiting for a crew"}.
+            </p>
+            {dup.address && (
+              <p className="text-xs text-gray-600">Nearest open case: {dup.address}</p>
+            )}
+            <p className="rounded-xl bg-zcream p-3 text-xs text-gray-700">
+              Sending the same problem twice does not move it up the queue — it splits it across
+              two cases, and the crew sees half the reports.
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                setDup(null);
+                setChosenCategory(null);
+                setStep("category");
+              }}
+              className="w-full rounded-xl bg-zgreen p-3 font-bold text-white hover:brightness-110"
+            >
+              It&apos;s a different problem — choose again
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setDup(null);
+                void confirmSubmit(true);
+              }}
+              className="w-full rounded-xl border-2 border-zorange p-3 font-bold text-zorange hover:bg-zorange/10"
+            >
+              It has got worse since then — send anyway
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setDup(null);
+                setStep("pin");
+              }}
+              className="w-full text-sm font-semibold text-gray-500 underline"
+            >
+              ← Back to the map
+            </button>
+          </div>
+        )}
+        {!sent && !dup && (
           <>
             {(step === "brief" ||
               step === "photo" ||
@@ -1172,12 +1253,12 @@ export default function Report() {
                 </p>
               </div>
               <button
-                onClick={confirmSubmit}
+                onClick={() => void confirmSubmit(false)}
                 disabled={!chosenCategory || busy}
                 className="w-full bg-zgreen hover:brightness-110 text-white font-bold text-lg rounded-xl p-4 disabled:opacity-40"
               >
                 {busy
-                  ? "Sending..."
+                  ? "Checking the council queue first..."
                   : `Confirm & send to ${deptInfo(deptOf(chosenCategory ?? "")).name}`}
               </button>
               <button

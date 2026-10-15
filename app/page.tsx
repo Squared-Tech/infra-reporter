@@ -148,7 +148,10 @@ export default function Home() {
           <h1 className="max-w-2xl text-4xl font-black leading-tight text-white md:text-6xl">
             Report a problem. <span className="text-zorange">Watch your town get fixed.</span>
           </h1>
-          <p className="mt-4 max-w-xl text-lg text-gray-200">
+          <p className="mt-5 text-xl font-black text-zorange md:text-2xl">
+            Fix what&apos;s broken. Report what&apos;s dangerous.
+          </p>
+          <p className="mt-3 max-w-xl text-lg text-gray-200">
             FixZed is the citizen reporting platform for local councils across Zambia. One photo
             is all it takes. Our AI classifies the issue, scores how precise your location is,
             and routes it to the right department in seconds. Emergencies ring an alarm at the

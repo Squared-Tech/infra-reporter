@@ -205,6 +205,10 @@ export default function InstallButton({ compact = false }: { compact?: boolean }
               </button>
             </div>
 
+            <p className="text-sm font-bold text-zorange">
+              Fix what&apos;s broken. Report what&apos;s dangerous.
+            </p>
+
             <Steps platform={platform} browser={browser} />
 
             {platform === "ios" && browser !== "inapp" && (
