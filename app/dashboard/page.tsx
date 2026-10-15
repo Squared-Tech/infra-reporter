@@ -1,6 +1,6 @@
 "use client";
 import dynamic from "next/dynamic";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/useAuth";
 import { playSiren } from "@/lib/siren";
@@ -8,6 +8,7 @@ import { Stripe, Wordmark } from "@/components/Brand";
 import { PROVINCES } from "@/lib/zambia";
 import { DEPARTMENT_IDS, deptInfo, catInfo } from "@/lib/departments";
 import { caseMessage, copyText, waDigits, waShareUrl } from "@/lib/share";
+import { BarList, Donut, Trend, type Slice } from "@/components/Charts";
 
 const ReportMap = dynamic(() => import("@/components/ReportMap"), { ssr: false });
 const ReportPinMap = dynamic(() => import("@/components/ReportPinMap"), { ssr: false });
@@ -30,6 +31,24 @@ function pinColor(level: string | null) {
   return level === "High" ? "#198a00" : level === "Medium" ? "#ef7d00" : "#de2010";
 }
 
+const DEPT_COLORS: Record<string, string> = {
+  fire_rescue: "#de2010",
+  police: "#2f3e9e",
+  solid_waste: "#6b8e23",
+  water_sanitation: "#0e7ea8",
+  veterinary: "#8b5cf6",
+  road_maintenance: "#ef7d00",
+  general: "#0d5c00",
+};
+
+const SEV_COLORS: Record<number, string> = {
+  5: "#de2010",
+  4: "#ef7d00",
+  3: "#e2b602",
+  2: "#7cb51c",
+  1: "#198a00",
+};
+
 const TABS = [
   { key: "reported", label: "🚨 Reported", empty: "Nothing waiting. Smooth sailing! 🌊" },
   { key: "in_progress", label: "🔧 In progress", empty: "No crews out right now. ☕" },
@@ -37,9 +56,32 @@ const TABS = [
 ] as const;
 type TabKey = (typeof TABS)[number]["key"];
 
+const STATUS_STYLE: Record<TabKey, { chip: string; bar: string; name: string }> = {
+  reported: { chip: "bg-zred/10 text-zred border-zred/30", bar: "#de2010", name: "Waiting for a crew" },
+  in_progress: { chip: "bg-zorange/10 text-zorange border-zorange/30", bar: "#ef7d00", name: "Crew assigned" },
+  fixed: { chip: "bg-zgreen/10 text-zdeep border-zgreen/30", bar: "#198a00", name: "Closed" },
+};
+
 function statusOf(r: any): TabKey {
   return r.status === "fixed" || r.status === "in_progress" ? r.status : "reported";
 }
+
+function ago(iso: string | null): string {
+  if (!iso) return "recently";
+  const mins = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000));
+  if (mins < 2) return "just now";
+  if (mins < 60) return `${mins} min ago`;
+  const hrs = Math.round(mins / 60);
+  if (hrs < 24) return `${hrs} h ago`;
+  const days = Math.round(hrs / 24);
+  return days === 1 ? "yesterday" : `${days} days ago`;
+}
+
+const FLOAT_CARDS = [
+  { src: "/img/road-works.png", alt: "Road works", tilt: "-7deg", delay: "0s" },
+  { src: "/img/fire-rescue.png", alt: "Fire and rescue", tilt: "5deg", delay: "1.1s" },
+  { src: "/img/community.png", alt: "Community", tilt: "-3deg", delay: "2.2s" },
+];
 
 export default function Dashboard() {
   const { ready, role, email, logout } = useAuth("council");
@@ -203,56 +245,155 @@ export default function Dashboard() {
     });
   }, [shown]);
 
+  // Reading the work: every figure below tracks the same list on screen, so a
+  // filtered view reports on that view rather than quietly showing everything.
+  const view = useMemo(() => {
+    const list = filtered;
+    const total = list.length;
+    const open = list.filter((r) => r.status !== "fixed").length;
+    const urgent = list.filter((r) => (r.severity ?? 0) >= 4 && r.status !== "fixed").length;
+    const fixed = list.filter((r) => r.status === "fixed").length;
+    const high = list.filter((r) => r.location_confidence === "High").length;
+
+    const statusSlices: Slice[] = [
+      { label: "Reported", value: list.filter((r) => statusOf(r) === "reported").length, color: "#de2010" },
+      {
+        label: "In progress",
+        value: list.filter((r) => statusOf(r) === "in_progress").length,
+        color: "#ef7d00",
+      },
+      { label: "Fixed", value: list.filter((r) => statusOf(r) === "fixed").length, color: "#198a00" },
+    ];
+
+    const confSlices: Slice[] = [
+      { label: "High", value: list.filter((r) => r.location_confidence === "High").length, color: "#198a00" },
+      {
+        label: "Medium",
+        value: list.filter((r) => r.location_confidence === "Medium").length,
+        color: "#ef7d00",
+      },
+      { label: "Low", value: list.filter((r) => r.location_confidence === "Low").length, color: "#de2010" },
+      {
+        label: "Unrated",
+        value: list.filter((r) => !["High", "Medium", "Low"].includes(r.location_confidence)).length,
+        color: "#9ca3af",
+      },
+    ];
+
+    const deptBars = DEPARTMENT_IDS.map((d) => ({
+      label: deptInfo(d).name.replace(/ Department| Unit| Services$/, ""),
+      emoji: deptInfo(d).emoji,
+      value: list.filter((r) => (r.department ?? "general") === d).length,
+      color: DEPT_COLORS[d],
+      id: d,
+    }))
+      .filter((b) => b.value > 0)
+      .sort((a, b) => b.value - a.value);
+
+    const sevBars = [5, 4, 3, 2, 1].map((s) => ({
+      label: `Severity ${s}`,
+      value: list.filter((r) => (r.severity ?? 0) === s).length,
+      color: SEV_COLORS[s],
+    }));
+
+    const provTally = new Map<string, number>();
+    for (const r of list) {
+      const p = r.province ?? "Unknown";
+      provTally.set(p, (provTally.get(p) ?? 0) + 1);
+    }
+    const provBars = [...provTally.entries()]
+      .map(([label, value]) => ({ label, value, color: "#0d5c00" }))
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 6);
+
+    const days: { label: string; value: number }[] = [];
+    const now = new Date();
+    for (let i = 13; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
+      const key = d.toDateString();
+      days.push({
+        label: `${d.getDate()}/${d.getMonth() + 1}`,
+        value: list.filter((r) => r.created_at && new Date(r.created_at).toDateString() === key)
+          .length,
+      });
+    }
+
+    return {
+      total,
+      open,
+      urgent,
+      fixed,
+      high,
+      resolved: total ? Math.round((fixed / total) * 100) : 0,
+      statusSlices,
+      confSlices,
+      deptBars,
+      sevBars,
+      provBars,
+      days,
+    };
+  }, [filtered]);
+
   if (!ready) return <p className="p-6 text-center text-gray-500">Loading...</p>;
 
-  const open = reports.filter((r) => r.status !== "fixed").length;
-  const urgent = reports.filter((r) => r.severity >= 4 && r.status !== "fixed").length;
-  const fixed = reports.filter((r) => r.status === "fixed").length;
-  const high = reports.filter((r) => r.location_confidence === "High").length;
+  const pct = (n: number) => (view.total ? Math.round((n / view.total) * 100) : 0);
 
-  const stats = [
-    { label: "Total reports", value: reports.length, color: "#111111" },
-    { label: "Open", value: open, color: "#ef7d00" },
-    { label: "Urgent (4-5)", value: urgent, color: "#de2010" },
-    { label: "Fixed", value: fixed, color: "#198a00" },
-    { label: "High-confidence location", value: high, color: "#198a00" },
+  const tiles = [
+    { icon: "📥", label: "Reports in view", value: view.total, sub: "matching your filters", color: "#111111", fill: 100 },
+    { icon: "🚨", label: "Open", value: view.open, sub: `${pct(view.open)}% of the pile`, color: "#ef7d00", fill: pct(view.open) },
+    { icon: "⚡", label: "Urgent (4-5)", value: view.urgent, sub: "needs a crew now", color: "#de2010", fill: pct(view.urgent) },
+    { icon: "✅", label: "Fixed", value: view.fixed, sub: `${pct(view.fixed)}% closed`, color: "#198a00", fill: pct(view.fixed) },
+    { icon: "📈", label: "Resolved", value: `${view.resolved}%`, sub: "of reports in view", color: "#0d5c00", fill: view.resolved },
+    { icon: "🛡️", label: "Solid pins", value: view.high, sub: `${pct(view.high)}% high confidence`, color: "#0e7ea8", fill: pct(view.high) },
   ];
 
+  const scope = [prov || null, dist || null, dept ? deptInfo(dept).name : null, onlyHigh ? "High-confidence only" : null]
+    .filter(Boolean)
+    .join(" · ");
+
+  const filtersOn = !!(prov || dist || dept || onlyHigh);
+
+  const card = "rounded-2xl border border-gray-100 bg-white p-4 shadow-sm";
+  const cardTitle = "flex items-center gap-2 text-sm font-extrabold text-zblack";
+
   return (
-    <div className="min-h-screen">
-      <header className="bg-zgreen text-white">
-        <div className="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
+    <div className="min-h-screen bg-zcream">
+      <header className="bg-gradient-to-r from-zgreen to-zdeep text-white">
+        <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
           <div className="flex items-center gap-3">
             <a href="/">
               <Wordmark light className="text-2xl" />
             </a>
-            <span className="hidden sm:inline bg-white/15 rounded-full px-3 py-1 text-sm font-semibold">
+            <span className="hidden rounded-full bg-white/15 px-3 py-1 text-sm font-semibold sm:inline">
               Council dashboard
             </span>
             <span
-              className={`rounded-full px-3 py-1 text-sm font-bold flex items-center gap-1.5 ${
+              className={`flex items-center gap-1.5 rounded-full px-3 py-1 text-sm font-bold ${
                 live ? "bg-zred text-white" : "bg-white/15 text-white/70"
               }`}
               title={live ? "Watching for new reports in real time" : "Connecting live feed..."}
             >
               <span
-                className={`inline-block w-2 h-2 rounded-full ${
-                  live ? "bg-white animate-pulse" : "bg-white/40"
+                className={`inline-block h-2 w-2 rounded-full ${
+                  live ? "animate-pulse bg-white" : "bg-white/40"
                 }`}
               />
               {live ? "LIVE" : "..."}
             </span>
           </div>
-          <div className="flex items-center gap-3 text-sm">
-            <span className="hidden sm:inline opacity-80">{email}</span>
+          <div className="flex items-center gap-2 text-sm">
+            <span className="hidden opacity-80 sm:inline">{email}</span>
             {role === "admin" && (
-              <a href="/admin" className="bg-white/15 hover:bg-white/25 rounded-full px-3 py-1 font-semibold">
+              <a
+                href="/admin"
+                className="rounded-full bg-white/15 px-3 py-1 font-semibold hover:bg-white/25"
+              >
                 👑 Admin
               </a>
             )}
             <button
               onClick={logout}
-              className="bg-white/15 hover:bg-white/25 rounded-full px-3 py-1"
+              className="rounded-full bg-white/15 px-3 py-1 hover:bg-white/25"
             >
               Log out
             </button>
@@ -261,144 +402,256 @@ export default function Dashboard() {
         <Stripe />
       </header>
 
-      <main className="max-w-5xl mx-auto p-4 space-y-4">
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-          {stats.map((s) => (
-            <div
-              key={s.label}
-              className="bg-white rounded-xl shadow p-4 border-t-4"
-              style={{ borderColor: s.color }}
-            >
-              <p className="text-3xl font-black" style={{ color: s.color }}>
-                {s.value}
+      <main className="mx-auto max-w-6xl space-y-5 p-4">
+        {/* Control-room banner */}
+        <section className="rise relative overflow-hidden rounded-3xl bg-zblack px-5 py-6 text-white shadow-lg sm:px-7">
+          <div
+            className="pointer-events-none absolute -right-16 -top-24 h-64 w-64 rounded-full bg-zgreen/40 blur-3xl"
+            aria-hidden
+          />
+          <div
+            className="pointer-events-none absolute -bottom-24 left-1/3 h-56 w-56 rounded-full bg-zorange/25 blur-3xl"
+            aria-hidden
+          />
+          <div className="relative flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+            <div className="max-w-xl space-y-2">
+              <p className="text-xs font-black uppercase tracking-[0.2em] text-zorange">
+                {live ? "Live caseload" : "Connecting…"}
               </p>
-              <p className="text-xs text-gray-600">{s.label}</p>
+              <h1 className="text-2xl font-black leading-tight sm:text-3xl">
+                {view.open > 0
+                  ? `${view.open} issue${view.open === 1 ? "" : "s"} still need${view.open === 1 ? "s" : ""} a crew`
+                  : "Every reported issue is closed"}
+              </h1>
+              <p className="text-sm text-white/70">
+                {scope ? `Filtered to ${scope}.` : "National view across every council on FixZed."}{" "}
+                {view.urgent > 0 && (
+                  <span className="font-bold text-zorange">{view.urgent} urgent.</span>
+                )}
+              </p>
+            </div>
+            <div className="flex shrink-0 items-end gap-3 sm:gap-4">
+              {FLOAT_CARDS.map((c, i) => (
+                <figure
+                  key={c.src}
+                  className="floaty w-24 shrink-0 rounded-2xl border-2 border-white/70 bg-white/10 p-1 shadow-xl sm:w-28"
+                  style={
+                    {
+                      "--tilt": c.tilt,
+                      transform: `rotate(${c.tilt})`,
+                      animationDelay: c.delay ?? `${i * 1.1}s`,
+                    } as CSSProperties
+                  }
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={c.src} alt={c.alt} className="h-20 w-full rounded-xl object-cover sm:h-24" />
+                  <figcaption className="px-1 py-1 text-[10px] font-bold uppercase tracking-wide text-white/80">
+                    {c.alt}
+                  </figcaption>
+                </figure>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* KPI tiles */}
+        <section className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+          {tiles.map((t, i) => (
+            <div
+              key={t.label}
+              className="rise lift relative overflow-hidden rounded-2xl border border-gray-100 bg-white p-4 shadow-sm"
+              style={{ animationDelay: `${i * 60}ms` }}
+            >
+              <div className="flex items-start justify-between">
+                <span className="text-xl">{t.icon}</span>
+                <span
+                  className="h-2 w-2 rounded-full"
+                  style={{ background: t.color }}
+                  aria-hidden
+                />
+              </div>
+              <p className="mt-2 text-3xl font-black leading-none" style={{ color: t.color }}>
+                {t.value}
+              </p>
+              <p className="mt-1 text-xs font-bold text-zblack">{t.label}</p>
+              <p className="text-[11px] text-gray-500">{t.sub}</p>
+              <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-gray-100">
+                <div
+                  className="h-full rounded-full transition-[width] duration-500"
+                  style={{ width: `${Math.max(2, t.fill)}%`, background: t.color }}
+                />
+              </div>
             </div>
           ))}
-        </div>
+        </section>
 
-        <div className="bg-white rounded-2xl shadow p-4 border border-gray-100 space-y-2">
-          <h2 className="text-lg font-extrabold">📬 Department queues (open cases)</h2>
-          <p className="text-xs text-gray-600">
-            Every report is routed straight to the responsible department. Tap a department
-            to see only its cases.
-          </p>
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+        {/* Charts */}
+        <section className="grid gap-3 lg:grid-cols-3">
+          <div className={card}>
+            <h2 className={cardTitle}>
+              <span>🍩</span> Caseload by status
+            </h2>
+            <p className="mb-3 mt-0.5 text-[11px] text-gray-500">
+              Where the {view.total} reports in view sit right now.
+            </p>
+            <Donut slices={view.statusSlices} centerLabel="in view" />
+          </div>
+
+          <div className={card}>
+            <h2 className={cardTitle}>
+              <span>📈</span> Reports per day
+            </h2>
+            <p className="mb-3 mt-0.5 text-[11px] text-gray-500">
+              Last 14 days · {view.days.reduce((n, d) => n + d.value, 0)} received.
+            </p>
+            <Trend points={view.days.map((d) => d.value)} labels={view.days.map((d) => d.label)} />
+          </div>
+
+          <div className={card}>
+            <h2 className={cardTitle}>
+              <span>🏛️</span> Workload by department
+            </h2>
+            <p className="mb-3 mt-0.5 text-[11px] text-gray-500">
+              Tap a bar in the queue below to isolate a department.
+            </p>
+            <BarList items={view.deptBars} emptyText="No department has been routed a case yet." />
+          </div>
+
+          <div className={card}>
+            <h2 className={cardTitle}>
+              <span>⚡</span> Severity mix
+            </h2>
+            <p className="mb-3 mt-0.5 text-[11px] text-gray-500">
+              5 is danger to life. The council works this list top-down.
+            </p>
+            <BarList items={view.sevBars} emptyText="No severity scores yet." />
+          </div>
+
+          <div className={card}>
+            <h2 className={cardTitle}>
+              <span>🗺️</span> Busiest provinces
+            </h2>
+            <p className="mb-3 mt-0.5 text-[11px] text-gray-500">
+              Ranked by reports in view · top {view.provBars.length || 0}.
+            </p>
+            <BarList items={view.provBars} emptyText="No province has reported yet." />
+          </div>
+
+          <div className={card}>
+            <h2 className={cardTitle}>
+              <span>🛡️</span> Location confidence
+            </h2>
+            <p className="mb-3 mt-0.5 text-[11px] text-gray-500">
+              How far the crew can trust the pin before it drives out.
+            </p>
+            <Donut slices={view.confSlices} centerLabel="pinned" />
+          </div>
+        </section>
+
+        {/* Department queues */}
+        <section className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
+          <div className="flex flex-wrap items-end justify-between gap-2">
+            <div>
+              <h2 className="text-lg font-extrabold">📬 Department queues</h2>
+              <p className="text-xs text-gray-600">
+                Every report is routed straight to the responsible department. Tap a department to
+                see only its cases.
+              </p>
+            </div>
+            {dept && (
+              <button
+                onClick={() => setDept("")}
+                className="rounded-full border border-zdeep/30 px-3 py-1 text-xs font-bold text-zdeep hover:bg-zdeep/10"
+              >
+                ✕ Clear department
+              </button>
+            )}
+          </div>
+          <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
             {DEPARTMENT_IDS.map((d) => {
               const openCount = base.filter(
                 (r) => (r.department ?? "general") === d && r.status !== "fixed"
               ).length;
+              const totalD = deptCounts.get(d) ?? 0;
+              const active = dept === d;
               return (
                 <button
                   key={d}
-                  onClick={() => setDept(d === dept ? "" : d)}
-                  className={`flex items-center gap-2 rounded-xl border-2 p-3 text-left transition ${
-                    dept === d
-                      ? "border-zdeep bg-zdeep/10"
+                  onClick={() => setDept(active ? "" : d)}
+                  className={`lift rounded-xl border-2 p-3 text-left transition ${
+                    active
+                      ? "border-zdeep bg-zdeep text-white shadow-md"
                       : "border-gray-200 bg-white hover:border-zdeep/50"
                   }`}
                 >
-                  <span className="text-2xl">{deptInfo(d).emoji}</span>
-                  <span className="flex-1 text-xs font-semibold leading-tight">
-                    {deptInfo(d).name}
-                  </span>
-                  <span
-                    className={`text-xl font-black ${openCount > 0 ? "text-zred" : "text-gray-300"}`}
-                  >
-                    {openCount}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-2xl">{deptInfo(d).emoji}</span>
+                    <span
+                      className={`flex-1 text-xs font-bold leading-tight ${
+                        active ? "text-white" : "text-zblack"
+                      }`}
+                    >
+                      {deptInfo(d).name}
+                    </span>
+                  </div>
+                  <div className="mt-2 flex items-baseline gap-2">
+                    <span
+                      className={`text-2xl font-black ${
+                        openCount > 0
+                          ? active
+                            ? "text-white"
+                            : "text-zred"
+                          : active
+                            ? "text-white/70"
+                            : "text-gray-300"
+                      }`}
+                    >
+                      {openCount}
+                    </span>
+                    <span className={`text-[11px] ${active ? "text-white/70" : "text-gray-500"}`}>
+                      open · {totalD} total
+                    </span>
+                  </div>
+                  <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-black/10">
+                    <div
+                      className="h-full rounded-full"
+                      style={{
+                        width: `${totalD ? Math.max(4, (openCount / totalD) * 100) : 0}%`,
+                        background: active ? "#ffffff" : DEPT_COLORS[d],
+                      }}
+                    />
+                  </div>
                 </button>
               );
             })}
           </div>
-        </div>
+        </section>
 
-        <div className="bg-white rounded-2xl shadow p-4 space-y-3 border border-gray-100">
-          <div className="flex items-center justify-between flex-wrap gap-2">
-            <h2 className="text-lg font-extrabold">🗺️ Filter by area</h2>
-            <label className="flex items-center gap-2 text-sm font-semibold cursor-pointer">
+        {/* Filters */}
+        <section className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm lg:sticky lg:top-2 lg:z-20">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h2 className="text-lg font-extrabold">🔎 Narrow the view</h2>
+            <label className="flex cursor-pointer items-center gap-2 rounded-full bg-zcream px-3 py-1.5 text-xs font-bold text-zdeep">
               <input
                 type="checkbox"
                 checked={onlyHigh}
                 onChange={(e) => setOnlyHigh(e.target.checked)}
-                className="w-4 h-4 accent-green-700"
+                className="h-4 w-4 accent-green-700"
               />
               High-confidence locations only
             </label>
           </div>
 
-          <div className="flex flex-wrap gap-2">
-            <button
-              onClick={() => {
-                setProv("");
-                setDist("");
-              }}
-              className={`rounded-full px-3 py-1 text-sm font-semibold border ${
-                prov === ""
-                  ? "bg-zgreen text-white border-zgreen"
-                  : "bg-white text-zgreen border-zgreen/40 hover:bg-zgreen/10"
-              }`}
-            >
-              🇿🇲 All provinces
-            </button>
-            {provinceCounts.map(([p, n]) => (
-              <button
-                key={p}
-                onClick={() => {
-                  setProv(p === prov ? "" : p);
-                  setDist("");
-                }}
-                className={`rounded-full px-3 py-1 text-sm font-semibold border ${
-                  prov === p
-                    ? "bg-zgreen text-white border-zgreen"
-                    : "bg-white text-zgreen border-zgreen/40 hover:bg-zgreen/10"
-                }`}
-              >
-                {p} <span className="opacity-70">({n})</span>
-              </button>
-            ))}
-          </div>
-
-          <div className="pt-1">
-            <p className="text-sm font-extrabold mb-2">🏢 Filter by department</p>
-            <div className="flex flex-wrap gap-2">
-              <button
-                onClick={() => setDept("")}
-                className={`rounded-full px-3 py-1 text-sm font-semibold border ${
-                  dept === ""
-                    ? "bg-zdeep text-white border-zdeep"
-                    : "bg-white text-zdeep border-zdeep/40 hover:bg-zdeep/10"
-                }`}
-              >
-                🏛️ All departments
-              </button>
-              {DEPARTMENT_IDS.map((d) => (
-                <button
-                  key={d}
-                  onClick={() => setDept(d === dept ? "" : d)}
-                  className={`rounded-full px-3 py-1 text-sm font-semibold border ${
-                    dept === d
-                      ? "bg-zdeep text-white border-zdeep"
-                      : "bg-white text-zdeep border-zdeep/40 hover:bg-zdeep/10"
-                  }`}
-                >
-                  {deptInfo(d).emoji} {deptInfo(d).name}
-                  <span className="opacity-70"> ({deptCounts.get(d) ?? 0})</span>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
+          <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
             <select
               value={prov}
               onChange={(e) => {
                 setProv(e.target.value);
                 setDist("");
               }}
-              className="border border-gray-300 rounded-xl p-3 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-zgreen"
+              className="rounded-xl border border-gray-300 bg-white p-3 text-sm focus:outline-none focus:ring-2 focus:ring-zgreen"
             >
-              <option value="">All provinces</option>
+              <option value="">🇿🇲 All provinces</option>
               {Object.keys(PROVINCES).map((p) => (
                 <option key={p} value={p}>
                   {p}
@@ -409,7 +662,7 @@ export default function Dashboard() {
               value={dist}
               onChange={(e) => setDist(e.target.value)}
               disabled={!prov}
-              className="border border-gray-300 rounded-xl p-3 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-zgreen disabled:opacity-50"
+              className="rounded-xl border border-gray-300 bg-white p-3 text-sm focus:outline-none focus:ring-2 focus:ring-zgreen disabled:opacity-50"
             >
               <option value="">{prov ? "All districts" : "Pick a province first"}</option>
               {(PROVINCES[prov] ?? []).map((d) => (
@@ -418,80 +671,162 @@ export default function Dashboard() {
                 </option>
               ))}
             </select>
+            <div className="flex items-center gap-2 sm:col-span-2 lg:col-span-2">
+              <span className="text-xs font-bold uppercase tracking-wide text-gray-500">
+                {filtersOn ? `${filtered.length} of ${reports.length} shown` : "All reports shown"}
+              </span>
+              {filtersOn && (
+                <button
+                  onClick={() => {
+                    setProv("");
+                    setDist("");
+                    setDept("");
+                    setOnlyHigh(false);
+                  }}
+                  className="rounded-full border border-zred/30 px-3 py-1 text-xs font-bold text-zred hover:bg-zred/10"
+                >
+                  ✕ Reset filters
+                </button>
+              )}
+            </div>
           </div>
-        </div>
 
-        <div className="rounded-2xl overflow-hidden shadow border border-gray-200">
-          <ReportMap reports={shown} />
-        </div>
-
-        <div className="grid grid-cols-3 gap-2">
-          {TABS.map((t) => (
-            <button
-              key={t.key}
-              onClick={() => setTab(t.key)}
-              className={`rounded-xl p-3 font-bold text-sm border-2 transition ${
-                tab === t.key
-                  ? t.key === "fixed"
-                    ? "bg-zgreen text-white border-zgreen"
-                    : t.key === "in_progress"
-                    ? "bg-zorange text-white border-zorange"
-                    : "bg-zred text-white border-zred"
-                  : "bg-white text-gray-700 border-gray-200 hover:border-gray-400"
-              }`}
-            >
-              {t.label}
-              <span
-                className={`ml-2 rounded-full px-2 py-0.5 text-xs ${
-                  tab === t.key ? "bg-white/25" : "bg-gray-100"
+          <div className="mt-3 flex flex-wrap gap-2">
+            {provinceCounts.map(([p, n]) => (
+              <button
+                key={p}
+                onClick={() => {
+                  setProv(p === prov ? "" : p);
+                  setDist("");
+                }}
+                className={`rounded-full border px-3 py-1 text-xs font-semibold transition ${
+                  prov === p
+                    ? "border-zgreen bg-zgreen text-white"
+                    : "border-zgreen/30 bg-white text-zgreen hover:bg-zgreen/10"
                 }`}
               >
-                {countOf(t.key)}
+                {p} <span className="opacity-70">({n})</span>
+              </button>
+            ))}
+          </div>
+        </section>
+
+        {/* Map */}
+        <section className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3">
+            <h2 className="text-lg font-extrabold">🗺️ Where they are</h2>
+            <div className="flex flex-wrap items-center gap-3 text-[11px] font-semibold text-gray-600">
+              <span className="flex items-center gap-1.5">
+                <span className="h-2.5 w-2.5 rounded-full bg-zgreen" /> High confidence
               </span>
-            </button>
-          ))}
-        </div>
+              <span className="flex items-center gap-1.5">
+                <span className="h-2.5 w-2.5 rounded-full bg-zorange" /> Medium
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="h-2.5 w-2.5 rounded-full bg-zred" /> Low / unrated
+              </span>
+            </div>
+          </div>
+          <div className="border-t border-gray-100">
+            <ReportMap reports={shown} />
+          </div>
+        </section>
+
+        {/* Status tabs */}
+        <section className="grid grid-cols-3 gap-2">
+          {TABS.map((t) => {
+            const active = tab === t.key;
+            return (
+              <button
+                key={t.key}
+                onClick={() => setTab(t.key)}
+                className={`lift relative overflow-hidden rounded-2xl border-2 p-3 text-left transition ${
+                  active
+                    ? "border-zdeep bg-white shadow-md"
+                    : "border-gray-200 bg-white/70 hover:border-gray-300"
+                }`}
+              >
+                <span
+                  className="absolute inset-y-0 left-0 w-1.5"
+                  style={{ background: STATUS_STYLE[t.key].bar }}
+                  aria-hidden
+                />
+                <span
+                  className={`block pl-2 text-sm font-black ${active ? "text-zblack" : "text-gray-600"}`}
+                >
+                  {t.label}
+                </span>
+                <span className="mt-0.5 block pl-2 text-[11px] text-gray-500">
+                  {STATUS_STYLE[t.key].name}
+                </span>
+                <span
+                  className="mt-1 block pl-2 text-2xl font-black"
+                  style={{ color: STATUS_STYLE[t.key].bar }}
+                >
+                  {countOf(t.key)}
+                </span>
+              </button>
+            );
+          })}
+        </section>
 
         {shown.length === 0 && (
-          <div className="bg-white rounded-2xl shadow p-8 text-center border border-gray-100">
-            <p className="text-4xl">🧹</p>
-            <p className="text-gray-600 mt-2 font-semibold">
-              {TABS.find((t) => t.key === tab)?.empty}
+          <div className="rounded-2xl border border-gray-100 bg-white p-10 text-center shadow-sm">
+            <p className="text-5xl">🧹</p>
+            <p className="mt-3 font-bold text-gray-700">{TABS.find((t) => t.key === tab)?.empty}</p>
+            <p className="mt-1 text-xs text-gray-500">
+              {filtersOn
+                ? "Your filters are on — reset them to see the rest of the caseload."
+                : "New reports appear here the moment a citizen sends one."}
             </p>
           </div>
         )}
 
         {groups.map(([p, districts]) => (
           <section key={p} className="space-y-3">
-            <h2 className="text-xl font-extrabold flex items-center gap-2 pt-2">
-              🗺️ {p}
+            <h2 className="flex items-center gap-2 pt-2 text-xl font-extrabold">
+              <span className="rounded-lg bg-zdeep px-2 py-0.5 text-white">🗺️ {p}</span>
               <span className="text-sm font-semibold text-gray-500">
-                ({districts.reduce((n, dRs) => n + dRs[1].length, 0)} in this tab)
+                {districts.reduce((n, dRs) => n + dRs[1].length, 0)} in this tab
               </span>
             </h2>
             {districts.map(([d, rs]) => (
               <div key={d} className="space-y-3">
-                <h3 className="text-sm font-bold text-zgreen uppercase tracking-wide">
+                <h3 className="text-xs font-black uppercase tracking-widest text-zgreen">
                   📍 {d} District
                 </h3>
                 {rs.map((r) => (
-                  <div
+                  <article
                     key={r.id}
                     id={`case-${r.id}`}
-                    className={`rounded-2xl shadow p-4 border transition space-y-3 ${
+                    className={`rise overflow-hidden rounded-2xl border shadow-sm transition ${
                       focus === r.id
-                        ? "ring-4 ring-zorange border-zorange"
-                        : "bg-white border-gray-100 hover:shadow-md"
+                        ? "border-zorange bg-white ring-4 ring-zorange"
+                        : "lift border-gray-100 bg-white hover:shadow-md"
                     }`}
                   >
-                    <div className="flex gap-4 flex-col md:flex-row">
-                      <div className="md:w-56 shrink-0 space-y-2">
+                    <div
+                      className="flex items-center justify-between gap-2 px-4 py-2 text-xs font-black uppercase tracking-wide"
+                      style={{
+                        background: `${STATUS_STYLE[statusOf(r)].bar}12`,
+                        color: STATUS_STYLE[statusOf(r)].bar,
+                      }}
+                    >
+                      <span>
+                        {deptInfo(r.department).emoji} {deptInfo(r.department).name}
+                      </span>
+                      <span>{ago(r.created_at)}</span>
+                    </div>
+
+                    <div className="flex flex-col gap-4 p-4 md:flex-row">
+                      <div className="space-y-2 md:w-56 md:shrink-0">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img
                           src={r.photo_url}
-                          className="w-full h-32 object-cover rounded-xl border border-gray-200"
                           alt=""
+                          className="h-32 w-full rounded-xl border border-gray-200 object-cover"
                         />
-                        <div className="rounded-xl overflow-hidden border border-gray-200">
+                        <div className="overflow-hidden rounded-xl border border-gray-200">
                           <ReportPinMap
                             lat={r.lat}
                             lng={r.lng}
@@ -500,12 +835,15 @@ export default function Dashboard() {
                           />
                         </div>
                       </div>
-                      <div className="flex-1 text-sm space-y-2">
-                        <p className="font-bold flex items-center gap-2 flex-wrap">
+
+                      <div className="flex-1 space-y-2 text-sm">
+                        <p className="flex flex-wrap items-center gap-2">
                           <span className={`rounded-full px-2 py-0.5 text-xs ${sevClass(r.severity)}`}>
                             {r.severity}/5
                           </span>
-                          {catInfo(r.category).emoji} {catInfo(r.category).label}
+                          <span className="text-base font-black text-zblack">
+                            {catInfo(r.category).emoji} {catInfo(r.category).label}
+                          </span>
                           <span
                             className={`rounded-full px-2 py-0.5 text-xs ${confClass(
                               r.location_confidence
@@ -515,25 +853,24 @@ export default function Dashboard() {
                             {r.location_score != null && ` ${r.location_score}`}
                           </span>
                         </p>
-                        <p className="inline-flex items-center gap-1 rounded-full bg-zdeep text-white px-3 py-1 text-xs font-bold">
-                          {deptInfo(r.department).emoji} Alerted: {deptInfo(r.department).name}
+                        <p className="text-gray-700">{r.reason}</p>
+                        <p className="rounded-lg bg-zcream px-3 py-2 text-xs font-semibold text-zdeep">
+                          👉 {r.suggested_action}
                         </p>
-                        <p className="text-gray-600">{r.reason}</p>
-                        <p className="text-gray-800">{r.suggested_action}</p>
                         <p className="text-xs text-gray-500">
                           📍 {r.address ?? "Address unavailable"}
                           {r.compound && ` · 🏘️ ${r.compound}`}
                           {r.accuracy_m != null && ` · ±${r.accuracy_m} m`}
                           {r.location_source && ` · ${r.location_source}`}
                         </p>
-                        <div className="rounded-xl bg-zcream border border-zgreen/20 p-3 text-xs space-y-1">
+                        <div className="rounded-xl border border-zgreen/20 bg-zcream p-3 text-xs">
                           <p className="font-bold text-zdeep">👤 Reporter contact (council only)</p>
-                          <p>
+                          <p className="mt-1">
                             {r.reporter_name ?? "Citizen"} ·{" "}
                             {r.reporter_phone ? (
                               <a
                                 href={`tel:${r.reporter_phone}`}
-                                className="text-zgreen font-semibold underline"
+                                className="font-semibold text-zgreen underline"
                               >
                                 📞 {r.reporter_phone}
                               </a>
@@ -545,11 +882,15 @@ export default function Dashboard() {
                           {r.note && <p className="text-gray-600">📝 {r.note}</p>}
                         </div>
                       </div>
-                      <div className="md:w-40 shrink-0 space-y-2">
+
+                      <div className="space-y-2 md:w-44 md:shrink-0">
+                        <label className="block text-[10px] font-black uppercase tracking-wide text-gray-500">
+                          Update status
+                        </label>
                         <select
                           value={r.status}
                           onChange={(e) => setStatus(r.id, e.target.value)}
-                          className="w-full border border-gray-300 rounded-lg p-2 text-sm bg-white"
+                          className="w-full rounded-lg border border-gray-300 bg-white p-2 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-zgreen"
                         >
                           <option value="reported">🚨 Reported</option>
                           <option value="in_progress">🔧 In progress</option>
@@ -585,12 +926,12 @@ export default function Dashboard() {
                           {copied === r.id
                             ? "✅ Copied"
                             : copied === `fail:${r.id}`
-                            ? "⚠️ Use Share instead"
-                            : "📋 Copy summary"}
+                              ? "⚠️ Use Share instead"
+                              : "📋 Copy summary"}
                         </button>
                       </div>
                     </div>
-                  </div>
+                  </article>
                 ))}
               </div>
             ))}
@@ -598,14 +939,17 @@ export default function Dashboard() {
         ))}
       </main>
 
+      <footer className="mx-auto max-w-6xl px-4 pb-10 pt-2 text-center text-xs text-gray-500">
+        FixZed · citizen reporting for Zambia&apos;s local councils · figures follow the filters you
+        have set
+      </footer>
+
       {alarm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70">
-          <div className="w-full max-w-md rounded-3xl overflow-hidden shadow-2xl animate-pulse bg-zred text-white">
-            <div className="p-6 space-y-3 text-center">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+          <div className="w-full max-w-md animate-pulse overflow-hidden rounded-3xl bg-zred text-white shadow-2xl">
+            <div className="space-y-3 p-6 text-center">
               <p className="text-6xl">🚨</p>
-              <h2 className="text-2xl font-black uppercase tracking-wide">
-                Emergency report
-              </h2>
+              <h2 className="text-2xl font-black uppercase tracking-wide">Emergency report</h2>
               <p className="text-lg font-bold">
                 {deptInfo(alarm.department).emoji} {deptInfo(alarm.department).name}
               </p>
@@ -622,15 +966,15 @@ export default function Dashboard() {
                 onClick={() => {
                   playSiren();
                 }}
-                className="w-full bg-zorange text-white font-black rounded-xl p-3 hover:brightness-110"
+                className="w-full rounded-xl bg-zorange p-3 font-black text-white hover:brightness-110"
               >
                 🔊 Tap for sound
               </button>
               <button
                 onClick={() => viewCase(alarm)}
-                className="w-full bg-white text-zred font-black rounded-xl p-3 hover:brightness-95"
+                className="w-full rounded-xl bg-white p-3 font-black text-zred hover:brightness-95"
               >
-                Acknowledge & view this case
+                Acknowledge &amp; view this case
               </button>
             </div>
           </div>
