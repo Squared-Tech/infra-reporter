@@ -162,6 +162,7 @@ export default function Report() {
   const [sizes, setSizes] = useState<{ orig: number; sent: number } | null>(null);
   const [alertMsg, setAlertMsg] = useState("");
   const [dup, setDup] = useState<any | null>(null);
+  const [closing, setClosing] = useState(false);
 
   const movedRef = useRef(false);
   const bestRef = useRef(Infinity);
@@ -281,6 +282,10 @@ export default function Report() {
   async function onPick(f: File | null) {
     setFile(f);
     setSent(false);
+    // A photo always means "start this report at the photo step"; otherwise a pick
+    // made while the wizard is parked on the last step leaves that step on screen
+    // with nothing left to show.
+    if (f) setStep("photo");
     setPhotoGps(null);
     setPhotoTime(null);
     setPhotoOld(false);
@@ -601,22 +606,69 @@ export default function Report() {
 
       <main className="max-w-xl mx-auto p-4 space-y-4">
         {sent && (
-          <div className="bg-zgreen/10 border border-zgreen rounded-2xl p-4">
-            <p className="font-bold text-zgreen text-lg">✅ Report sent to the council</p>
-            <p className="text-sm text-gray-700">
-              Thank you for helping improve your community. Your report has been analysed
-              and added to the council&apos;s priority list.
-            </p>
-            {sizes && sizes.orig > 0 && (
-              <p className="text-xs text-gray-600 mt-1">
-                📉 Data saver: {(sizes.orig / 1048576).toFixed(1)} MB on your phone →{" "}
-                {(sizes.sent / 1024).toFixed(0)} KB sent (
-                {Math.max(0, Math.round(100 - (sizes.sent / sizes.orig) * 100))}% less data
-                used).
-              </p>
-            )}
-            {alertMsg && <p className="text-sm font-semibold text-zdeep mt-1">{alertMsg}</p>}
-          </div>
+          <>
+            <div className="fixed inset-0 -z-10">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src="/img/confirm-send.png"
+                alt=""
+                className="h-full w-full object-cover"
+              />
+              <div className="absolute inset-0 bg-white/70" />
+            </div>
+            <div className="flex min-h-[75vh] items-center justify-center">
+              <div className="w-full max-w-lg space-y-3 rounded-2xl border-4 border-zgreen bg-white/95 p-5 shadow-2xl">
+                <div className="space-y-1 text-center">
+                  <p className="text-3xl">✅</p>
+                  <p className="text-lg font-extrabold text-zgreen">Report sent to the council</p>
+                  <p className="text-sm text-gray-700">
+                    Thank you for helping improve your community. Your report has been analysed
+                    and added to the council&apos;s priority list.
+                  </p>
+                </div>
+                {sizes && sizes.orig > 0 && (
+                  <p className="text-xs text-gray-600">
+                    📉 Data saver: {(sizes.orig / 1048576).toFixed(1)} MB on your phone →{" "}
+                    {(sizes.sent / 1024).toFixed(0)} KB sent (
+                    {Math.max(0, Math.round(100 - (sizes.sent / sizes.orig) * 100))}% less data
+                    used).
+                  </p>
+                )}
+                {alertMsg && <p className="text-sm font-semibold text-zdeep">{alertMsg}</p>}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSent(false);
+                    setClosing(false);
+                    setStep("brief");
+                  }}
+                  className="w-full rounded-xl bg-zgreen p-4 text-lg font-bold text-white hover:brightness-110"
+                >
+                  📷 Report another incident
+                </button>
+                {closing ? (
+                  <p className="rounded-xl bg-zcream p-3 text-center text-xs text-gray-700">
+                    Your report is already with the council. Press your phone&apos;s{" "}
+                    <b>Back</b> or <b>Home</b> button to leave FixZed — there is nothing else to
+                    do here.
+                  </p>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      // Browsers only allow this for windows they opened themselves, so the
+                      // note above is what a citizen actually sees on most phones.
+                      window.close();
+                      setClosing(true);
+                    }}
+                    className="w-full rounded-xl border-2 border-zgreen p-3 font-bold text-zgreen hover:bg-zgreen/10"
+                  >
+                    ✅ Done — close the app
+                  </button>
+                )}
+              </div>
+            </div>
+          </>
         )}
         {dup && (
           <div className="rounded-2xl border-2 border-zorange bg-white/95 p-4 space-y-3">
