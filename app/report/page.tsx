@@ -816,28 +816,53 @@ export default function Report() {
             {step === "photo" && (
               <div className="flex min-h-[75vh] items-center justify-center">
               <div className="w-full max-w-lg rounded-2xl border-4 border-zgreen bg-white/95 p-5 space-y-4 shadow-2xl">
-          <label
-            htmlFor="photo"
-            className="block cursor-pointer rounded-xl border-2 border-dashed border-zgreen/50 bg-zgreen/5 p-6 text-center hover:bg-zgreen/10"
-          >
+          <div className="rounded-xl border-2 border-dashed border-zgreen/50 bg-zgreen/5 p-6 text-center">
             {preview ? (
               <img src={preview} alt="" className="mx-auto max-h-56 rounded-lg" />
             ) : (
               <>
                 <div className="text-4xl">📷</div>
-                <p className="font-semibold text-zgreen mt-1">Take or choose a photo</p>
-                <p className="text-xs text-gray-500">Tap here to open your camera or gallery</p>
+                <p className="font-semibold text-zgreen mt-1">Add your photo</p>
+                <p className="text-xs text-gray-500">
+                  Use the camera now, or pick a photo you already took
+                </p>
               </>
             )}
-          </label>
-          <input
-            id="photo"
-            type="file"
-            accept="image/*"
-            capture="environment"
-            className="hidden"
-            onChange={(e) => onPick(e.target.files?.[0] ?? null)}
-          />
+          </div>
+          {/* One input with capture=environment hides the gallery entirely on a phone,
+              so the two routes need two inputs. */}
+          <div className="grid grid-cols-2 gap-3">
+            <label
+              htmlFor="photo-camera"
+              className="cursor-pointer rounded-xl bg-zgreen p-3 text-center font-bold text-white hover:brightness-110"
+            >
+              📷 Take a photo
+            </label>
+            <label
+              htmlFor="photo-gallery"
+              className="cursor-pointer rounded-xl border-2 border-zgreen p-3 text-center font-bold text-zgreen hover:bg-zgreen/10"
+            >
+              🖼️ From gallery
+            </label>
+          </div>
+          {[
+            { id: "photo-camera", capture: "environment" as const },
+            { id: "photo-gallery", capture: undefined },
+          ].map((i) => (
+            <input
+              key={i.id}
+              id={i.id}
+              type="file"
+              accept="image/*"
+              capture={i.capture}
+              className="hidden"
+              onChange={(e) => {
+                const f = e.target.files?.[0] ?? null;
+                e.target.value = "";
+                onPick(f);
+              }}
+            />
+          ))}
           <p className="text-xs text-gray-500">
             📉 <b>Data saver is on.</b> Photos are compressed only for transmission, and the
             council still receives a clear, full-colour picture, and the GPS location saved
