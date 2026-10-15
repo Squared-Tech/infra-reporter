@@ -7,7 +7,7 @@ export default function manifest(): MetadataRoute.Manifest {
     description:
       "Report infrastructure and community issues with one photo. FixZed's AI routes your report to the right council department with a location-confidence score, and emergencies alert the council live.",
     id: "/",
-    start_url: "/",
+    start_url: "/login",
     scope: "/",
     display: "standalone",
     orientation: "portrait",

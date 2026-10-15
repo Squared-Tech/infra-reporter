@@ -73,7 +73,15 @@ export default function Home() {
   // Staff go straight to their dashboard; citizens see the landing page.
   useEffect(() => {
     if (!ready) return;
-    if (role === "council" || role === "admin") router.replace("/dashboard");
+    if (role === "council" || role === "admin") {
+      router.replace("/dashboard");
+      return;
+    }
+    // Opened from the home-screen icon, there is nothing to market, so go in.
+    const installed =
+      window.matchMedia("(display-mode: standalone)").matches ||
+      (navigator as { standalone?: boolean }).standalone === true;
+    if (installed) router.replace("/login");
   }, [ready, role, router]);
 
   if (!ready) return <p className="p-6 text-center text-gray-500">Loading...</p>;
