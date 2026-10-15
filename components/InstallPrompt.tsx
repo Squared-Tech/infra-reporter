@@ -65,7 +65,7 @@ export default function InstallPrompt() {
         <p className="text-xs text-gray-600">
           {evt
             ? "Get an app icon, full screen and a faster start for reporting."
-            : "In Safari: tap Share, then Add to Home Screen."}
+            : "In Safari: tap Share, then Add to Home Screen. If you opened this link in WhatsApp, tap the ⋯ or long-press and choose Open in Safari first, because WhatsApp has no Share button."}
         </p>
       </div>
       {evt && (

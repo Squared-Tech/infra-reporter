@@ -22,7 +22,7 @@ export const DEPARTMENTS: Record<
     name: "Police Department",
     emoji: "🚔",
     blurb: "Petty crime, vandalism, public safety",
-    phone: "+260975170412",
+    phone: "",
     emergency: true,
   },
   solid_waste: {

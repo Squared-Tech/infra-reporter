@@ -23,8 +23,9 @@ export const metadata: Metadata = {
     capable: true,
     statusBarStyle: "black-translucent",
     title: "FixZed",
-    startupImage: "/icons/apple-touch-icon.png",
   },
+  // iOS still reads the prefixed spelling; Next only emits the standard one.
+  other: { "apple-mobile-web-app-capable": "yes" },
   icons: {
     apple: "/icons/apple-touch-icon.png",
   },
