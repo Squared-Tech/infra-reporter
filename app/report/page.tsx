@@ -172,6 +172,15 @@ export default function Report() {
   const [regionName, setRegionName] = useState<string | null>(null);
   const [compoundMap, setCompoundMap] = useState<LatLng | null>(null);
 
+  // A phone-number account already carries its number, so the details step
+  // starts filled in for someone who signed up without an email address.
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => {
+      const p = String(data.user?.user_metadata?.phone ?? "");
+      if (p) setPhone((cur) => cur || `+${p}`);
+    });
+  }, []);
+
   const preview = useMemo(() => (file ? URL.createObjectURL(file) : null), [file]);
 
   const forwarded =

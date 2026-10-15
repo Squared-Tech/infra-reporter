@@ -4,12 +4,14 @@ import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { Stripe, Wordmark } from "@/components/Brand";
 import InstallButton from "@/components/InstallButton";
+import { isZambiaMobile, phoneAccount, zambiaDigits } from "@/lib/phone";
 
 export default function Login() {
   const router = useRouter();
   const [mode, setMode] = useState<"in" | "up">("in");
+  const [kind, setKind] = useState<"email" | "phone">("phone");
   const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
+  const [ident, setIdent] = useState("");
   const [password, setPassword] = useState("");
   const [msg, setMsg] = useState("");
   const [info, setInfo] = useState("");
@@ -51,8 +53,36 @@ export default function Login() {
     setInfo("");
 
     if (mode === "up") {
+      if (kind === "phone") {
+        if (!isZambiaMobile(ident)) {
+          setMsg("Use a Zambian mobile number, e.g. 0971 234 567.");
+          setBusy(false);
+          return;
+        }
+        const r = await fetch("/api/signup", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ full_name: name, phone: zambiaDigits(ident), password }),
+        })
+          .then((x) => x.json())
+          .catch(() => null);
+        if (!r?.ok) {
+          setMsg(r?.error ?? "Could not create the account.");
+          setBusy(false);
+          return;
+        }
+        const s = await supabase.auth.signInWithPassword({ email: r.email, password });
+        if (s.error || !s.data.user) {
+          setInfo("Account created. Log in with your number and password.");
+          setMode("in");
+          setBusy(false);
+          return;
+        }
+        await routeByRole(s.data.user.id);
+        return;
+      }
       const { data, error } = await supabase.auth.signUp({
-        email,
+        email: ident,
         password,
         options: { data: { full_name: name } },
       });
@@ -62,7 +92,7 @@ export default function Login() {
         return;
       }
       if (!data.session) {
-        setSentTo(email);
+        setSentTo(ident);
         setCode("");
         setBusy(false);
         return;
@@ -71,9 +101,12 @@ export default function Login() {
       return;
     }
 
-    const addr = email.trim().includes("@")
-      ? email.trim()
-      : `${email.trim().toLowerCase()}@fixzed.zm`;
+    const addr =
+      kind === "phone"
+        ? phoneAccount(zambiaDigits(ident))
+        : ident.trim().includes("@")
+          ? ident.trim()
+          : `${ident.trim().toLowerCase()}@fixzed.zm`;
 
     const { data, error } = await supabase.auth.signInWithPassword({ email: addr, password });
     if (error || !data.user) {
@@ -206,13 +239,50 @@ export default function Login() {
                 className={inputCls}
               />
             )}
+            <div className="grid grid-cols-2 gap-2 rounded-xl bg-gray-100 p-1">
+              {(
+                [
+                  ["phone", "📱 Phone number"],
+                  ["email", "✉️ Email"],
+                ] as const
+              ).map(([k, label]) => (
+                <button
+                  key={k}
+                  type="button"
+                  onClick={() => {
+                    setKind(k);
+                    setIdent("");
+                    setMsg("");
+                  }}
+                  aria-pressed={kind === k}
+                  className={`rounded-lg p-2 text-sm font-bold ${
+                    kind === k ? "bg-white text-zdeep shadow" : "text-gray-500"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
             <input
-              placeholder={mode === "in" ? "Email or username (admin)" : "Email"}
-              type={mode === "in" ? "text" : "email"}
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              placeholder={
+                kind === "phone"
+                  ? "e.g. 0971 234 567"
+                  : mode === "in"
+                    ? "Email or username (admin)"
+                    : "Email"
+              }
+              type={kind === "phone" ? "tel" : mode === "in" ? "text" : "email"}
+              inputMode={kind === "phone" ? "tel" : undefined}
+              autoComplete={kind === "phone" ? "tel" : "username"}
+              value={ident}
+              onChange={(e) => setIdent(e.target.value)}
               className={inputCls}
             />
+            {kind === "phone" && (
+              <p className="text-xs text-gray-500">
+                No email address needed. Your number and the password you choose are your login.
+              </p>
+            )}
             <input
               placeholder="Password (min 6 characters)"
               type="password"
@@ -223,10 +293,21 @@ export default function Login() {
 
             <button
               onClick={go}
-              disabled={busy || !email || password.length < 6 || (mode === "up" && !name)}
+              disabled={
+                busy ||
+                (kind === "phone" ? !isZambiaMobile(ident) : !ident.trim()) ||
+                password.length < 6 ||
+                (mode === "up" && !name)
+              }
               className="w-full bg-zgreen hover:brightness-110 text-white font-bold rounded-xl p-3 disabled:opacity-40"
             >
-              {busy ? "Please wait..." : mode === "in" ? "Log in" : "Create account"}
+              {busy
+                ? "Please wait..."
+                : mode === "in"
+                  ? "Log in"
+                  : kind === "phone"
+                    ? "Create account with my number"
+                    : "Create account"}
             </button>
 
             {info && <p className="text-zgreen text-sm font-semibold">{info}</p>}
