@@ -1,9 +1,25 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
-  <rect width="512" height="512" rx="104" fill="#198a00"/>
-  
-  <g transform="translate(256 256) scale(1) translate(-256 -256)">
-  <path d="M256 96 C177.8 96 114 159.8 114 238 C114 331.6 256 452 256 452 C256 452 398 331.6 398 238 C398 159.8 334.2 96 256 96 Z" fill="#ffffff"/>
-  <circle cx="256" cy="236" r="64" fill="#0d5c00"/>
-  <path d="M225 236 l22 24 l48 -52" fill="none" stroke="#ffffff" stroke-width="20" stroke-linecap="round" stroke-linejoin="round"/>
-</g>
+  <defs><clipPath id="sq"><rect width="512" height="512" rx="104"/></clipPath></defs>
+  <g clip-path="url(#sq)">
+    <rect width="512" height="512" fill="#111111"/>
+    <g transform="translate(256 256) scale(1) translate(-256 -256)">
+      <path d="M256 62 C166 62 93 135 93 225 C93 331 256 466 256 466 C256 466 419 331 419 225 C419 135 346 62 256 62 Z" fill="#de2010"/>
+      <circle cx="256" cy="220" r="74" fill="#111111"/>
+      
+    <g transform="translate(256 256) rotate(-45)">
+      <g fill="#111111" stroke="#111111" stroke-width="30" stroke-linejoin="round">
+        <rect x="-125" y="-32" width="250" height="64" rx="10"/>
+        <circle cx="-125" cy="0" r="68"/>
+        <circle cx="125" cy="0" r="68"/>
+      </g>
+      <g fill="#ef7d00">
+        <rect x="-125" y="-32" width="250" height="64" rx="10"/>
+        <circle cx="-125" cy="0" r="68"/>
+        <circle cx="125" cy="0" r="68"/>
+      </g>
+      <rect x="143" y="-27" width="80" height="54" rx="12" fill="#111111"/>
+      <polygon points="-81,0 -103,38.1 -147,38.1 -169,0 -147,-38.1 -103,-38.1" fill="#de2010"/>
+    </g>
+    </g>
+  </g>
 </svg>

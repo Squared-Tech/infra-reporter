@@ -1,5 +1,5 @@
 // FixZed service worker: installable shell, offline fallback, no stale data.
-const CACHE = "fixzed-v2";
+const CACHE = "fixzed-v3";
 const PRECACHE = [
   "/offline",
   "/manifest.webmanifest",
